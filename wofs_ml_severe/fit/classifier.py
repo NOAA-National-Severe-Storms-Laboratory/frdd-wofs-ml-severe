@@ -32,7 +32,7 @@ class Classifier(Emailer):
         self.ML_MODEL_SAVE_PATH = '/work/mflora/ML_DATA/NEW_ML_MODELS'
         self._n_jobs=n_jobs
         
-    def fit(self, model_name, X,y, categorical_features=None, params=None):
+    def fit(self, model_name, X,y, dates, categorical_features=None, params=None):
         self._model_name = model_name
         
         # Get the start time (inherited from Emailer) 
@@ -41,8 +41,13 @@ class Classifier(Emailer):
         # Get the index of the Initialization Time since it is a categorical feature.
         # Used for the HistGradientBoostingClassifier. 
         features = list(X.columns)
-        numeric_features = features if categorical_features is None else [f for f in features 
+        numeric_features = features if categorical_features is None else [i for i, f in enumerate(features) 
                                                                   if f not in categorical_features]
+        
+        # Get the base classifier.
+        categorical_features_mask = [True for f in features if f in categorical_features]
+        base_estimator = self._get_classifier(n_jobs=self._n_jobs, 
+                                              categorical_features = categorical_features_mask) 
         
         # Build the pipeline. The pipeline is composed of 
         # an imputer (for any missing values), a min-max scaler, 
@@ -55,22 +60,17 @@ class Classifier(Emailer):
                                       categorical_features=categorical_features)
         
         steps = preprocessor.get_steps()
-        pipeline.append(('model', base_estimator))
+        steps.append(('model', base_estimator))
         pipeline = Pipeline(steps) 
-       
-        # Get the base classifier.
-        categorical_features_mask = [True for f in features if f in categorical_features]
-        base_estimator = self._get_classifier(n_jobs=self._n_jobs, 
-                                              categorical_features = categorical_features_mask) 
-        
        
         
         # Initialize CalibratedPipelineHyperOptCV. 
-        dates = info['Run Dates'] 
         known_skew = np.mean(y) 
          # Get the parameter grid for the hyperparameter tuning.
         param_grid = self.get_param_grid() if params is None else None
 
+        print(f'{param_grid=}')
+        
         clf = CalibratedHyperOptCV( estimator = pipeline,
                                   param_grid = param_grid,
                                   hyperopt='atpe',
