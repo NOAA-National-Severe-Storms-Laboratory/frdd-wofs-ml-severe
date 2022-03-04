@@ -1,20 +1,21 @@
 import smtplib, ssl
+import datetime
 
 class Emailer:
     def get_start_time(self):
         return datetime.datetime.now()
     
-    def get_duration(self, start_time):
+    def get_duration(self,):
         duration =  datetime.datetime.now() - start_time
         seconds = duration.total_seconds()
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         seconds = seconds % 60
     
-        return hours, minutes, seconds, start_time
+        return hours, minutes, seconds
     
-    def send_message(self, message):
-        hours, minutes, seconds, start_time = self.get_duration
+    def send_message(self, message, start_time):
+        hours, minutes, seconds = self.get_duration(start_time)
         
         message = f""" 
                Subject: Finished!
