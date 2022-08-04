@@ -1,5 +1,5 @@
 from .io.io import IO 
-from .io.ml_data_pipeline import MLDataPipeline
+from .data.ml_data_pipeline import MLDataPipeline
 
-from .fit.classifier import Classifier
+#from .fit.classifier import Classifier
 

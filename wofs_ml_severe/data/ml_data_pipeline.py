@@ -19,9 +19,10 @@ import logging
 import pandas as pd 
 import xarray as xr 
 import numpy as np 
+from skimage.measure import regionprops
 
 # Personal Modules
-from wofs_ml_severe.common.util import Emailer
+from ..common.util import Emailer
 
 from WoF_post.wofs.ml.wofs_ensemble_track_id import generate_ensemble_track_file
 from WoF_post.wofs.ml.wofs_ml_severe import MLOps
@@ -67,17 +68,18 @@ class MLDataPipeline(Emailer):
     METADATA = ['forecast_time_index', 'Run Date', 'Initialization Time', 'obj_centroid_x', 
             'obj_centroid_y', 'label']
     
-    def __init__(self, dates=None, n_jobs=30, verbose=True):
+    def __init__(self, dates=None, times = ['2200'], n_jobs=30, out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
         self.logger = Logger()
         self._base_path = '/work/mflora/SummaryFiles'
+        self.out_path = out_path 
         
         if dates is None:
             self.dates = [d for d in os.listdir(self._base_path) if '.txt' not in d]
-            self.send_email = True
+            self.send_email_bool = True
         else:
             self.dates = dates
-            self.times = ['2200'] 
-            self.send_email = False
+            self.times = times 
+            self.send_email_bool = True
         
         self._runtype = 'rto'
         self.n_jobs = n_jobs
@@ -114,7 +116,7 @@ class MLDataPipeline(Emailer):
         """ Identifies the ensemble tracks from the 30M files """
         # Get the start time, which is used for computing the 
         # compute duration. 
-        start_time = self._get_start_time()
+        start_time = self.get_start_time()
         
         # Get the filenames. 
         filenames = self.get_files_for_tracks()
@@ -130,9 +132,9 @@ class MLDataPipeline(Emailer):
                 )
             
         # Send an email to myself once the process is done! 
-        if self.send_email:
-            self.send_email_update(start_time, 
-                               "Re-processing of the Ensemble Storm Track files is complete!")
+        if self.send_email_bool:
+            self.send_message(
+                               "Re-processing of the Ensemble Storm Track files is complete!", start_time)
         
     def get_ml_features(self,):
         """ Extract ML features from the WoFS using the 
@@ -168,23 +170,28 @@ class MLDataPipeline(Emailer):
                 else:
                     self.logger('debug', f'{ml_file} already exists!...')  
                     
-        start_time = self._get_start_time()
+        start_time = self.get_start_time()
 
+        ###print(f'{files_to_load=}')
+        
         if len(files_to_load) > 0:
             # MAIN FUNCTION
-            mlops(n_processors=self.n_jobs, 
-              runtype=self._runtype,
-              predict=False,
-              files_to_load=files_to_load
-             ) 
+            try:
+                mlops(n_processors=self.n_jobs, 
+                  runtype=self._runtype,
+                  predict=False,
+                  files_to_load=files_to_load
+                 ) 
+            except:
+                print(traceback.format_exc())
         # Check that for every ENSEMBLETRACK file, there is a corresponding MLDATA file! 
         #files = self.files_to_run(original_type='MLDATA', new_type = 'ENSEMBLETRACKS')
         #print('ml_files:', files) 
         #if len(files) > 1:
         #    self.logger('critical', 'Not all MLDATA files were created for the existing ENSEMBLETRACK files')
         
-            if self.send_email:
-                self.send_email_update(start_time, "ML feature extraction is finished!")  
+            if self.send_email_bool:
+                self.send_message("ML feature extraction is finished!", start_time)  
         
     def match_to_storm_reports(self, 
                                cent_dist_max=15.0, 
@@ -201,12 +208,12 @@ class MLDataPipeline(Emailer):
         dists 
         
         """
-        start_time = self._get_start_time()
+        start_time = self.get_start_time()
         
         # Get the filenames. 
         filenames = self.files_to_run(original_type='ENSEMBLETRACKS', new_type = 'MLTARGETS')
         
-        print(f'{filenames=}')
+        ###print(f'{filenames=}')
               
         def worker(track_file):
             """
@@ -216,31 +223,45 @@ class MLDataPipeline(Emailer):
             Multiple matching minimum matching distances are used. 
             """
             try:
-                tracks_ds = xr.open_dataset(track_file, decode_times=False)
+                tracks_ds = xr.load_dataset(track_file, decode_times=False)
                 tracks = tracks_ds['w_up__ensemble_tracks'].values
+                object_props = regionprops(tracks, tracks)
                 labels = np.unique(tracks)[1:]
-                storm_data_ds = self.reports_to_grid(track_file)
+                storm_data_ds, lsr_points = self.reports_to_grid(track_file)
     
-                target_dict = {}
-                for var in list(storm_data_ds.data_vars):
+                target_vars = [v for v in storm_data_ds.data_vars if 'severe' in v] 
+    
+                if len(target_vars) == 0:
+                    return None 
+    
+                target_obj_match_dict = {}
+                target_old_dict = {}
+            
+                for var in target_vars:
                     target = storm_data_ds[var].values
                     for min_dist_max in dists:
                         obj_match = ObjectMatcher(min_dist_max=min_dist_max,
-                          cent_dist_max=cent_dist_max,
-                          time_max=time_max,
-                          score_thresh = score_thresh,
-                          one_to_one = True)
+                                      cent_dist_max=cent_dist_max,
+                                      time_max=time_max,
+                                      score_thresh = score_thresh,
+                                      one_to_one = True)
                         matched_tracks, _ , _ = obj_match.match_objects(object_set_a=tracks, object_set_b=target,)
-
+                        match_dict = match_to_lsrs(object_props, lsr_points[var], dist_to_lsr=min_dist_max)
+                        
                         # Create target column 
-                        target_dict[f"{var}_{min_dist_max*3}km"] = [1 if label in matched_tracks else 0 for label in labels]
+                        target_obj_match_dict[f"{var}_{min_dist_max*3}km_obj_match"] = [1 if label in 
+                                                                              matched_tracks else 0 for label in labels]
+                        
+                        target_old_dict[f"{var}_{min_dist_max*3}km"] = [match_dict[l] for l in labels]
+                         
+                full_target_dict = {**target_obj_match_dict, **target_old_dict}       
 
                 storm_data_ds.close()
                 tracks_ds.close()
             
                 del tracks_ds, storm_data_ds
             
-                df = pd.DataFrame(target_dict)
+                df = pd.DataFrame(full_target_dict)
                 target_file = track_file.replace('ENSEMBLETRACKS', 'MLTARGETS').replace('.nc', '.feather')
             
                 self.logger('debug', f'Saving {target_file}...') 
@@ -249,7 +270,8 @@ class MLDataPipeline(Emailer):
                 return None 
             except:
                 print(traceback.format_exc())
-
+                return None 
+                
         if len(filenames) > 0:
     
             run_parallel(
@@ -259,34 +281,36 @@ class MLDataPipeline(Emailer):
                 mode='joblib',
                 )
         
-            if self.send_email:
-                self.send_email_update(start_time, 'Matching to storm reports is finished!')
+            if self.send_email_bool:
+                self.send_message('Matching to storm reports is finished!', start_time)
             
     def reports_to_grid(self, ncfile,):
         """ Converts storm reports to a grid for object matching. """
         # Determine the initial time from the ncfile 
         comps = decompose_file_path(ncfile)
-        init_time = comps['VALID_DATE']+comps['INIT_TIME']
+        init_time = comps['VALID_DATE']+comps['VALID_TIME']
         report = StormReports(init_time, 
             forecast_length=30,
             err_window=15, 
             )
  
-        ds = xr.open_dataset(ncfile)
-    
+        ds = xr.load_dataset(ncfile)
+        
         try:
-            ds = report.to_grid(dataset=ds)
+            grid_ds = report.to_grid(dataset=ds)
+            lsr_points = report.get_points(dataset=ds)
+            
         except Exception as e:
             self.logger('info', f'Unable to process storm reports for {ncfile}!')
             self.logger('error', e, exc_info=True) 
             
-        return ds 
+        return grid_ds, lsr_points
     
     def concatenate_dataframes(self,):
         """ Load the ML features and target dataframes
         and concatenate into a single dataframe """
         delta_time_step = int(self._DURATION / self._DT)
-        start_time = self._get_start_time()
+        start_time = self.get_start_time()
         
         ml_files = self.get_files('MLDATA')
         target_files = [f.replace('MLDATA', 'MLTARGETS') for f in ml_files] 
@@ -317,12 +341,13 @@ class MLDataPipeline(Emailer):
 
             ml_features = [f for f in _df.columns if f not in baseline_features]
             ml_df = _df[ml_features]
+           
             
-            baseline_df.to_feather(f'/work/mflora/ML_DATA/DATA/wofs_ml_severe__{name}__baseline_data.feather')
-            ml_df.to_feather(f'/work/mflora/ML_DATA/DATA/wofs_ml_severe__{name}__data.feather')
+            baseline_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__baseline_data.feather'))
+            ml_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__data.feather'))
 
-        if self.send_email:
-            self.send_email_update(start_time, 'Final datasets are built!')
+        if self.send_email_bool:
+            self.send_message('Final datasets are built!', start_time)
     
     def get_files(self, file_type=None):
         filenames = []
@@ -402,32 +427,3 @@ class MLDataPipeline(Emailer):
         
         return filenames 
     
-    def _get_start_time(self,):
-        return datetime.datetime.now()
-    
-    def send_email_update(self, start_time, text):
-        """ Reports when a step of the pipeline is finished 
-        and provides information on the duration 
-        
-        Parameters
-        ---------------
-        start_time : datetime object 
-            datetime.datetime.now() declared at the top of a function.
-        
-        text : str 
-            The message to be email delivered. 
-        """
-        duration =  datetime.datetime.now() - start_time
-        seconds = duration.total_seconds()
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        seconds = seconds % 60
-
-        message = f"""
-             {text}
-             
-             Started at {start_time.strftime("%I:%M %p")}, 
-             Duration : {hours:.2f} hours : {minutes:.2f} minutes : {seconds:.2f} seconds                     
-         """
-        send_email(message)
-
