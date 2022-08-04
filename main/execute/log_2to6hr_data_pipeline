@@ -1,0 +1,4 @@
+Number of paths : 644
+base_message='From : {sender_email}\r\nTo: {receiver_email}\r\n\r\n \n               Subject: Finished!\n               Starting process for wofs_ML2to6\n               Started at 07:19 PM, \n               Duration : 0.00 hours : 0.00 minutes : 31.22 seconds\n              '
+base_message='From : {sender_email}\r\nTo: {receiver_email}\r\n\r\n \n               Subject: Finished!\n               Individual dataframes for the 2-6 hr dataset are complete\n               Started at 07:19 PM, \n               Duration : 0.00 hours : 0.00 minutes : 32.32 seconds\n              '
+base_message='From : {sender_email}\r\nTo: {receiver_email}\r\n\r\n \n               Subject: Finished!\n               The 2-6 hr ML and BL datasets are built and ready to go!\n               Started at 07:19 PM, \n               Duration : 0.00 hours : 1.00 minutes : 33.32 seconds\n              '

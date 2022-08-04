@@ -17,14 +17,15 @@ class IO:
         self.basePath = basePath 
     
     
-    def _train_test_split():
+    def _train_test_split(self):
         """
         Randomly split the full dataset into training and testing 
         based on the date. 
         """
         for time in ['first_hour', 'second_hour']:
-    
+
             path = join(self.basePath, f'wofs_ml_severe__{time}__data.feather')
+            print(f'Loading {path}...')
             df = pd.read_feather(path)
     
             # Get the date from April, May, and June 
@@ -34,9 +35,14 @@ class IO:
             random.shuffle(all_dates)
             train_dates, test_dates = train_test_split(all_dates, test_size=0.3)
     
-            train_df = df[df['Run Date'].isin(train_dates)] 
+            train_df = df[df['Run Date'].isin(train_dates)]
             test_df  = df[df['Run Date'].isin(test_dates)] 
+            
+            train_df.reset_index(inplace=True, drop=True)
+            test_df.reset_index(inplace=True, drop=True)
+            
     
+            print(f'Saving the {time} training and testing datasets...')
             train_df.to_feather(join(self.basePath, f'wofs_ml_severe__{time}__train_data.feather'))
             test_df.to_feather(join(self.basePath, f'wofs_ml_severe__{time}__test_data.feather'))
             
@@ -45,7 +51,7 @@ class IO:
         Get the feature columns from the DataFrame. 
         """
         ind = list(df.columns).index('hail_severe_3km')
-        non_target_vars = list(train_df.columns)[:ind]
+        non_target_vars = list(df.columns)[:ind]
         features = [f for f in non_target_vars if f not in self.INFO]
         return features
     
