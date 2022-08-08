@@ -5,7 +5,7 @@ class Emailer:
     def get_start_time(self):
         return datetime.datetime.now()
     
-    def get_duration(self,):
+    def get_duration(self, start_time):
         duration =  datetime.datetime.now() - start_time
         seconds = duration.total_seconds()
         hours = seconds // 3600

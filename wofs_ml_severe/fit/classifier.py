@@ -32,7 +32,11 @@ class Classifier(Emailer):
         self.ML_MODEL_SAVE_PATH = '/work/mflora/ML_DATA/NEW_ML_MODELS'
         self._n_jobs=n_jobs
         
-    def fit(self, model_name, X,y, dates, categorical_features=None, params=None):
+    def fit(self, model_name, X,y, dates, save_name, categorical_features=None, 
+            params=None, imputer='simple', scaler='standard', resample='under', 
+           n_valid_dates=15, max_iter=20, n_jobs=1):
+        
+        
         self._model_name = model_name
         
         # Get the start time (inherited from Emailer) 
@@ -53,9 +57,9 @@ class Classifier(Emailer):
         # an imputer (for any missing values), a min-max scaler, 
         # an random undersampler, and then a one-hot encoder 
         # for the categorical features (only init time at the moment).
-        preprocessor = PreProcessPipeline(imputer='simple', 
-                                      scaler='minmax',
-                                      resample='under', 
+        preprocessor = PreProcessPipeline(imputer=imputer, 
+                                      scaler=scaler,
+                                      resample=resample, 
                                       numeric_features=numeric_features, 
                                       categorical_features=categorical_features)
         
@@ -74,25 +78,28 @@ class Classifier(Emailer):
         clf = CalibratedHyperOptCV( estimator = pipeline,
                                   param_grid = param_grid,
                                   hyperopt='atpe',
-                                  max_iter=20,
+                                  max_iter=max_iter,
                                   scorer_kwargs = {'known_skew': known_skew},
                                   cv = 'date_based',
                                   cv_kwargs = {'n_splits' : 5,
                                                'dates' : dates,
-                                               'valid_size' : 20 },
+                                               'valid_size' : n_valid_dates},
+                                  n_jobs=n_jobs, 
                                   )
             
         # Fit the model. 
         clf.fit(X,y, params)
             
         # Save the model. TODO: Might need to be more descript wiht the filename at some point. 
-        save_fname = f'{model_name}_{time}_{target}.joblib'
-        clf.save(join(self.ML_MODEL_SAVE_PATH, save_fname))
+        #save_fname = f'{model_name}_{time}_{target}.joblib'
+        clf.save(save_name)
             
         # Send email 
-        message = f'{join(self.ML_MODEL_SAVE_PATH, save_fname)} has finished training!'
+        message = f'{save_name} has finished training!'
         self.send_message(message, start_time) 
-            
+        
+        return clf 
+        
     
     def get_param_grid(self):
         if 'Random' in self._model_name:
@@ -168,7 +175,7 @@ class Classifier(Emailer):
         
         # Logistic Regression 
         elif 'LogisticRegression' in self._model_name:
-            return LogisticRegression(n_jobs=n_jobs, solver='saga', penalty='elasticnet', max_iter=300, random_state=42)
+            return LogisticRegression(solver='saga', penalty='elasticnet', max_iter=100, random_state=42)
         
         elif 'HistGradientBoosting' in self._model_name:
             try:

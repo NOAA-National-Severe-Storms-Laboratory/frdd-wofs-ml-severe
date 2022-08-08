@@ -23,11 +23,15 @@ from skimage.measure import regionprops
 
 # Personal Modules
 from ..common.util import Emailer
+from ..common.multiprocessing_utils import run_parallel, to_iterator
 
+# WoF_post modules 
 from WoF_post.wofs.ml.wofs_ensemble_track_id import generate_ensemble_track_file
 from WoF_post.wofs.ml.wofs_ml_severe import MLOps
+# Will need to make sure this is update!!
 from monte_python.object_matching import match_to_lsrs, ObjectMatcher
-from WoF_post.wofs.post.multiprocessing_script import run_parallel, to_iterator
+
+# TODO: Update the StormReporter and point to it appropriately!!
 from WoF_post.wofs.verification.lsrs.get_storm_reports import StormReports
 from WoF_post.wofs.plotting.util import decompose_file_path
 from WoF_post.wofs.post.utils import save_dataset
@@ -56,12 +60,15 @@ class MLDataPipeline(Emailer):
     
     1. Identify ensemble tracks.
         - Checks if the file already exists.
+        
     2. Perform the feature engineering, build the dataframes, save it 
         - Checks if the file already exists. 
-    3. Get the most up-to-date storm reports. 
+        
+    3. Get the most up-to-date storm reports or storm data. 
         
     4. Match the ensemble storm tracks to storm reports.
         - storm reports are converted to grids 
+        
     5. Concatenate the dataframe together with the target dataframes
     
     """
@@ -90,8 +97,11 @@ class MLDataPipeline(Emailer):
         self._NT = 36 
         
         
-    def __call__(self):
+    def __call__(self, delete_existing=False):
         """ Initiates the date building."""
+        # TO-DO: if delete_existing, then delete any 
+        # existing ENSEMBLETRACKS, MLTARGETS, MLDATA
+        
         self.logger('info', '='*50) 
         self.logger('info', '============= STARTING A NEW DATA PIPELINE =============') 
         
@@ -130,11 +140,14 @@ class MLDataPipeline(Emailer):
                 mode='mp',
                 kwargs = {'logger' : self.logger}, 
                 )
+            message = "Re-processing of the Ensemble Storm Track files is complete!"
+        else:
+            message = "No Ensemble storm tracks to process, moving onto the next step...."
             
         # Send an email to myself once the process is done! 
         if self.send_email_bool:
             self.send_message(
-                               "Re-processing of the Ensemble Storm Track files is complete!", start_time)
+                               message, start_time)
         
     def get_ml_features(self,):
         """ Extract ML features from the WoFS using the 
@@ -172,8 +185,6 @@ class MLDataPipeline(Emailer):
                     
         start_time = self.get_start_time()
 
-        ###print(f'{files_to_load=}')
-        
         if len(files_to_load) > 0:
             # MAIN FUNCTION
             try:
@@ -184,6 +195,7 @@ class MLDataPipeline(Emailer):
                  ) 
             except:
                 print(traceback.format_exc())
+                
         # Check that for every ENSEMBLETRACK file, there is a corresponding MLDATA file! 
         #files = self.files_to_run(original_type='MLDATA', new_type = 'ENSEMBLETRACKS')
         #print('ml_files:', files) 
@@ -215,6 +227,8 @@ class MLDataPipeline(Emailer):
         
         ###print(f'{filenames=}')
               
+        # TODO: incorporate the new matching!!!    
+            
         def worker(track_file):
             """
             Match the ensemble storm tracks to the gridded LSRs. 
@@ -245,6 +259,7 @@ class MLDataPipeline(Emailer):
                                       time_max=time_max,
                                       score_thresh = score_thresh,
                                       one_to_one = True)
+                        
                         matched_tracks, _ , _ = obj_match.match_objects(object_set_a=tracks, object_set_b=target,)
                         match_dict = match_to_lsrs(object_props, lsr_points[var], dist_to_lsr=min_dist_max)
                         
@@ -286,6 +301,9 @@ class MLDataPipeline(Emailer):
             
     def reports_to_grid(self, ncfile,):
         """ Converts storm reports to a grid for object matching. """
+        
+        # This code should be inside the StormReporter
+        
         # Determine the initial time from the ncfile 
         comps = decompose_file_path(ncfile)
         init_time = comps['VALID_DATE']+comps['VALID_TIME']

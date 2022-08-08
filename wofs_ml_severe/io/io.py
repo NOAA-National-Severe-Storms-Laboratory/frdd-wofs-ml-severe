@@ -9,6 +9,10 @@ from sklearn.model_selection import train_test_split
 import random
 
 
+
+
+
+
 class IO:
     
     INFO = ['forecast_time_index', 'obj_centroid_x', 'obj_centroid_y', 'Run Date', 'label']
@@ -75,7 +79,45 @@ class IO:
         pass
         
         
+def load_ml_data(lead_time = 'first_hour', 
+                 mode = 'train',
+                 cols_to_drop = ['label', 'obj_centroid_x', 
+                                 'obj_centroid_y', 'Run Date', 
+                                 'forecast_time_index'], 
+                target_col = 'hail_severe_3km_obj_match',
+                sanity_check=False 
+                ): 
+    """ Loads the ML dataset. """
+    # Target Var : [tornado|wind|hail]_[severe|sig_severe]_[3km, 9km, 15km, 30km]_[obj_match | ]
+    #base_path = '/work/mflora/ML_DATA/MLDATA'
+    #file_path = join(base_path, f'wofs_ml_severe__{lead_time}__{mode}_data.feather')
+    
+    if sanity_check:
+        base_path = '/work/mflora/ML_DATA/DATA'
+        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__data.feather')
+    else:
+        base_path = '/work/mflora/ML_DATA/MLDATA'
+        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__{mode}_data.feather')
         
+    df = pd.read_feather(file_path)
+
+    metadata = df[['Run Date', 'forecast_time_index', 'Initialization Time', 'label']]
+    index = list(df.columns).index('hail_severe_3km_obj_match')
+    possible_features = list(df.columns)[:index]
+
+    drop_vars = ['QVAPOR', 'freezing_level', 'stp', 'okubo_weiss', 'Initialization Time', 
+                 'qv_2', 'srh_0to500'
+                ]
+    
+    features = [f for f in possible_features if f not in cols_to_drop]
+    
+    if sanity_check:
+        features = [f for f in features if not any([d in f for d in drop_vars])]
+    
+    X = df[features]
+    y = df[target_col]
+
+    return X,y, metadata     
         
         
         
