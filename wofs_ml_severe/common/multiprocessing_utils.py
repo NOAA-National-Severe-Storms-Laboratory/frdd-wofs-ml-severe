@@ -2,11 +2,11 @@ import multiprocessing as mp
 import itertools
 from multiprocessing.pool import Pool
 from datetime import datetime
-#from tqdm import tqdm
-from tqdm.notebook import tqdm
+from tqdm import tqdm  
 import traceback
 from collections import ChainMap
 import warnings
+from copy import copy
 
 from joblib._parallel_backends import SafeFunction
 from joblib import delayed, Parallel
@@ -14,37 +14,6 @@ from joblib import delayed, Parallel
 # Ignore the warning for joblib to set njobs=1 for
 # models like RandomForest
 warnings.simplefilter("ignore", UserWarning)
-
-def text_progessbar(seq, total=None):
-    step = 1
-    tick = time.time()
-    while True:
-        time_diff = time.time()-tick
-        avg_speed = time_diff/step
-        total_str = 'of %n' % total if total else ''
-        print('step', step, '%.2f' % time_diff, 'avg: %.2f iter/sec' % avg_speed, total_str)
-        step += 1
-        yield next(seq)
-
-all_bar_funcs = {
-    'tqdm': lambda args: lambda x: tqdm(x, **args),
-    'txt': lambda args: lambda x: text_progessbar(x, **args),
-    'False': lambda args: iter,
-    'None': lambda args: iter,
-}
-
-def ParallelExecutor(use_bar='tqdm', **joblib_args):
-    def aprun(bar=use_bar, **tq_args):
-        def tmp(op_iter):
-            if str(bar) in all_bar_funcs.keys():
-                bar_func = all_bar_funcs[str(bar)](tq_args)
-            else:
-                raise ValueError("Value %s not supported as bar type"%bar)
-            return Parallel(**joblib_args)(bar_func(op_iter))
-        return tmp
-    return aprun
-
-
 
 class LogExceptions(object):
     def __init__(self, func):
@@ -79,9 +48,8 @@ def to_iterator(*lists):
 def run_parallel(
     func,
     args_iterator,
-    kwargs,
     nprocs_to_use,
-    total, 
+    kwargs={}, 
 ):
     """
     Runs a series of python scripts in parallel. Scripts uses the tqdm to create a
@@ -99,6 +67,13 @@ def run_parallel(
         kwargs : dict
             keyword arguments to be passed to the func
     """
+    iter_copy = copy(args_iterator)
+    
+    total = len(list(iter_copy))
+    pbar = tqdm(total=total)
+    def update(*a):
+        pbar.update()
+    
     if 0 <= nprocs_to_use < 1:
         nprocs_to_use = int(nprocs_to_use * mp.cpu_count())
     else:
@@ -108,11 +83,15 @@ def run_parallel(
         raise ValueError(
             f"User requested {nprocs_to_use} processors, but system only has {mp.cpu_count()}!"
         )
+        
+    pool = Pool(processes=nprocs_to_use)
+    for args in args_iterator:
+        if isinstance(args, str):
+            args = (args,)
+         
+        pool.apply_async(LogExceptions(func), args=args, callback=update)
+    pool.close()
+    pool.join()
 
-    aprun = ParallelExecutor(n_jobs=nprocs_to_use, require='sharedmem')(bar='tqdm', total=total)
-    results = aprun(  
-                delayed(LogExceptions(func))(*args, **kwargs) for args in args_iterator
-    )
-
-    return results 
+    ##return results 
 
