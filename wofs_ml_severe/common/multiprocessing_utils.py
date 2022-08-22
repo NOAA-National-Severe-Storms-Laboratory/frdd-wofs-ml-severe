@@ -45,6 +45,11 @@ def to_iterator(*lists):
     return itertools.product(*lists)
 
 
+def log_result(result):
+    # This is called whenever foo_pool(i) returns a result.
+    # result_list is modified only by the main process, not the pool workers.
+    result_list.append(result)
+
 def run_parallel(
     func,
     args_iterator,
@@ -71,7 +76,10 @@ def run_parallel(
     
     total = len(list(iter_copy))
     pbar = tqdm(total=total)
+    results = [] 
     def update(*a):
+        # This is called whenever a process returns a result.
+        # results is modified only by the main process, not by the pool workers. 
         pbar.update()
     
     if 0 <= nprocs_to_use < 1:
@@ -85,13 +93,18 @@ def run_parallel(
         )
         
     pool = Pool(processes=nprocs_to_use)
+    ps = []
     for args in args_iterator:
         if isinstance(args, str):
             args = (args,)
          
-        pool.apply_async(LogExceptions(func), args=args, callback=update)
+        p = pool.apply_async(LogExceptions(func), args=args, kwargs=kwargs, callback=update)
+        ps.append(p)
+        
     pool.close()
     pool.join()
 
-    ##return results 
+    results = [p.get() for p in ps]
+    
+    return results 
 
