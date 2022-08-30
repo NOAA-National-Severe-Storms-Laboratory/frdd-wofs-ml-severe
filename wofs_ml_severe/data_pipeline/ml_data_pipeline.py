@@ -1,6 +1,6 @@
 #======================================================
 # A complete data pipeline for generating the ML datasets
-# used to train and evaluate the WoFS-ML-Severe product.
+# used to train and evaluate the WoFS-ML-Severe products.
 # 
 # Author: Montgomery Flora (Git username : monte-flora)
 # Email : monte.flora@noaa.gov 
@@ -28,6 +28,7 @@ from ..common.multiprocessing_utils import run_parallel, to_iterator
 # WoF_post modules 
 from WoF_post.wofs.ml.wofs_ensemble_track_id import generate_ensemble_track_file
 from WoF_post.wofs.ml.wofs_ml_severe import MLOps
+
 # Will need to make sure this is update!!
 from monte_python.object_matching import match_to_lsrs, ObjectMatcher
 
@@ -74,6 +75,9 @@ class MLDataPipeline(Emailer):
     """
     METADATA = ['forecast_time_index', 'Run Date', 'Initialization Time', 'obj_centroid_x', 
             'obj_centroid_y', 'label']
+    
+    # TODO: Add the ensemble storm tracks parameters as an arg for data pipeline.
+    # Then add the ensemble storm track parameters to a config file. 
     
     def __init__(self, dates=None, times = ['2200'], n_jobs=30, out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
         self.logger = Logger()
@@ -124,6 +128,9 @@ class MLDataPipeline(Emailer):
     
     def get_ensemble_tracks(self,):
         """ Identifies the ensemble tracks from the 30M files """
+        # TODO: Add some kind of config to set the parameters of the object ID. 
+        # TODO: Add the ability to override existing data in an ensemble storm track.
+        
         # Get the start time, which is used for computing the 
         # compute duration. 
         start_time = self.get_start_time()
@@ -137,7 +144,6 @@ class MLDataPipeline(Emailer):
                 func = generate_ensemble_track_file,
                 nprocs_to_use = self.n_jobs,
                 iterator = to_iterator(filenames),
-                mode='mp',
                 kwargs = {'logger' : self.logger}, 
                 )
             message = "Re-processing of the Ensemble Storm Track files is complete!"
@@ -360,7 +366,6 @@ class MLDataPipeline(Emailer):
             ml_features = [f for f in _df.columns if f not in baseline_features]
             ml_df = _df[ml_features]
            
-            
             baseline_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__baseline_data.feather'))
             ml_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__data.feather'))
 
@@ -368,28 +373,24 @@ class MLDataPipeline(Emailer):
             self.send_message('Final datasets are built!', start_time)
     
     def get_files(self, file_type=None):
-        filenames = []
-        for d in self.dates:
-            filepath = join(self._base_path, d)
-            if hasattr(self, 'times'):
-                times = self.times
-            else:
-                times = os.listdir(filepath)
+        """
+        Returns a list of filename with the given file type.
+        """
+        paths = []
+        if file_type is None:
+            # When no file type is given, just return the file directories. 
+            for d in self.dates:
+                times = os.listdir(join(self._base_path, d))
+                dirs = [join(self._base_path,d,t) for t in times]
+                paths.extend(dirs)
+        else:
+            for d in self.dates:
+                path = join(self._base_path,d)
+                for (dir_path, _, file_names) in os.walk(path):
+                    file_names = [join(dir_path, f) for f in file_names if file_type in f]
+                    paths.extend(file_names) 
             
-            for t in times: 
-                if t != 'basemap':
-                    if file_type is None:
-                        f = [join(self._base_path, d, t)]
-                    else:
-                        _path = join(self._base_path, d, t, f'wofs_{file_type}*')
-                        f = glob(_path)
-
-                    if len(f) >= 1:
-                        filenames.extend(f)
-                    else:
-                        self.logger('info', f"Files of form: {_path}* do not exist!")
-    
-        return filenames 
+        return paths 
     
     def files_to_run(self, original_type='30M', new_type = 'ENSEMBLETRACKS'):
         """ Checks that files are created! """
@@ -422,7 +423,6 @@ class MLDataPipeline(Emailer):
                 env_file = glob(join(indir, f'wofs_ENV_{t:02d}*'))[0]
                 svr_file = env_file.replace('ENV', 'SVR')
                 ens_files = [glob(join(indir, f'wofs_ENS_{_t:02d}*'))[0] for _t in range(t, t+delta_time_step+1)]                
-        
                 files_to_load.append( {'track_file': track_file, 
                          'ens_file' : ens_files, 
                          'env_file'  : env_file, 
@@ -431,7 +431,6 @@ class MLDataPipeline(Emailer):
             
             except IndexError:
                 print(f'IndexError! {indir}/ENSEMBLETRACK file at {t+delta_time_step} is not available!') 
-    
     
         return files_to_load
     

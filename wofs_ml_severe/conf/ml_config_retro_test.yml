@@ -1,0 +1,90 @@
+#######################################
+# MACHINE LEARNING CONFIGURATION YAML
+#######################################
+
+UH_THRESHS : [ 50, 150, 200]
+WIND_THRESHS : [ 20, 40, 60]
+HAIL_THRESHS : [ 0.75, 1.0, 1.25]
+
+# (in grid points) 
+NMEP_SIZES : [0, 3, 5, 9]
+
+BASELINE_VARS : 
+    tornado : 'uh_probs_>180_prob_max'
+    severe_hail : 'hail_probs_>1.0_prob_max'
+    severe_wind : 'wnd_probs_>40_prob_max'
+    
+ML_MODEL_PATH : '../models/'
+
+RENAME_TARGETS : 
+    matched_to_severe_hail_0km : 'Severe Hail' 
+    matched_to_tornado_0km     : 'Tornado' 
+    matched_to_severe_wind_0km : 'Severe Wind'
+                    
+MODEL_NAMES : ['RandomForest', 
+               'LogisticRegression', 
+               'Baseline'
+              ]
+TARGETS : ['tornado', 
+           'severe_hail', 
+           'severe_wind'
+          ] 
+
+ENS_VARS  : [ 'uh_2to5',
+              'wz_0to2',
+              'ws_80', 
+              'hailcast',
+              'w_up'
+              
+]
+
+ENV_IN_ENS_VARS : [ 'freezing_level',]
+
+ENV_VARS : [
+              'theta_e',
+]
+
+SVR_VARS : [ 'srh_0to1',
+           ]
+
+ENS_MIN_VARS : [ ]
+
+MORPHOLOGICAL_FEATURES : [
+                          'area',
+                          'eccentricity',
+                          'extent',
+                          'orientation',
+                          'minor_axis_length',
+                          'major_axis_length',
+                          'intensity_max',
+                          ]
+    
+RESAMPLE_DICT : 
+    first_hour : 
+        tornado       :
+            RandomForest      : 'under'
+            LogisticRegression: 'under'
+            XGBoost           : 'under'
+        severe_hail   :
+            RandomForest      : 'under'
+            LogisticRegression: 'under'
+            XGBoost           : None
+        severe_wind :
+            RandomForest      : None
+            LogisticRegression: 'under'
+            XGBoost'           : None
+
+    second_hour: 
+        tornado :
+            RandomForest      : 'under'
+            LogisticRegression: None
+            XGBoost           : 'under'
+        severe_hail :
+            RandomForest      : None
+            LogisticRegression: None
+            XGBoost           : None
+        severe_wind :
+            RandomForest      : 'under'
+            LogisticRegression: None
+            XGBoost           : None
+       
