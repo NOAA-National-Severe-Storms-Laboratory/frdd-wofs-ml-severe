@@ -1,0 +1,38 @@
+#######################################
+# MACHINE LEARNING CONFIGURATION YAML
+#######################################
+
+UH_THRESHS : [ 50, 150]
+WIND_THRESHS : [ 20, 40]
+HAIL_THRESHS : [ 0.75, 1.0]
+
+# (in grid points) 
+NMEP_SIZES : [0, 3]
+
+BASELINE_VARS : 
+    tornado : 'uh_probs_>180_prob_max'
+    severe_hail : 'hail_probs_>1.0_prob_max'
+    severe_wind : 'wnd_probs_>40_prob_max'
+    
+ML_MODEL_PATH : '../models/'
+
+RENAME_TARGETS : 
+    matched_to_severe_hail_0km : 'Severe Hail' 
+    matched_to_tornado_0km     : 'Tornado' 
+    matched_to_severe_wind_0km : 'Severe Wind'
+                    
+ENS_VARS  : ['ens_var1']
+ENV_IN_ENS_VARS : []
+ENV_VARS : ['env_var1']
+ENS_MIN_VARS : ['ens_min_var1']
+
+MORPHOLOGICAL_FEATURES : [
+                          'area',
+                          'eccentricity',
+                          'extent',
+                          'orientation',
+                          'minor_axis_length',
+                          'major_axis_length',
+                          'intensity_max',
+                          ]
+    
