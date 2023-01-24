@@ -52,7 +52,7 @@ class StormReportLoader:
         if len(initial_time) != 12:
                 raise ValueError('initial_time format needs to be YYYYMMDDHHmm!')
         
-        if report_type == 'LSR':
+        if report_type == 'IOWA':
             DTYPE = {'VALID': np.int64, 'LAT':np.float64, 'LON':np.float64, 'MAG':np.float64, 'TYPETEXT': object}
             COLS = ['VALID', 'LAT', 'LON', 'MAG', 'TYPETEXT']
             self._EVENT_TYPE ='TYPETEXT'
@@ -124,8 +124,14 @@ class StormReportLoader:
         """
         points = self.get_points(dataset, magnitude, hazard)
         data ={}
+        
+        try:
+            nx = len(dataset.NX.values)
+        except:
+            nx = len(dataset.XLAT.values)
+        
         for key in points.keys():
-            gridded_reports = self.points_to_grid(xy_pair=points[key], nx=len(dataset.NX.values))
+            gridded_reports = self.points_to_grid(xy_pair=points[key], nx=nx)
             data[key] = (['y', 'x'], maximum_filter(gridded_reports, size))
         
         ds = xr.Dataset(data)
@@ -167,7 +173,7 @@ class StormReportLoader:
         ##print(f'{self.start_date} - {self.end_date}')
         
         self.time_mask = (self.df.date >= self.start_date) & (self.df.date <= self.end_date)
-        
+
         #self.time_mask = (self.df.date > self.start_date) & (self.df.date < self.end_date)
         #df = self.df[self.time_mask==True]
 
@@ -278,8 +284,13 @@ class StormReportLoader:
         """Uses a KD-tree approach to determine, which i,j index an
         lat/lon coordiante pair is closest to. Used to map storm reports to 
         the WoFS domain"""
-        wofs_lat = np.round(ds.xlat.values,7)
-        wofs_lon = np.round(ds.xlon.values,7)
+        
+        try:
+            wofs_lat = np.round(ds.xlat.values,7)
+            wofs_lon = np.round(ds.xlon.values,7)
+        except:
+            wofs_lat = np.round(ds.XLAT.values,7)
+            wofs_lon = np.round(ds.XLON.values,7)
         
         max_points = wofs_lat.shape[0]*wofs_lat.shape[1]
         

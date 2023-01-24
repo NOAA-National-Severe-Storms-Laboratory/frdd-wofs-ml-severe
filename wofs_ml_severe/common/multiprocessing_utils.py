@@ -30,6 +30,7 @@ class LogExceptions(object):
         except Exception as e:
             # Here we add some debugging help. If multiprocessing's
             # debugging is on, it will arrange to log the traceback
+            print(traceback.format_exc())
             self.error(traceback.format_exc())
             # Re-raise the original exception so the Pool worker can
             # clean up
@@ -44,7 +45,6 @@ def to_iterator(*lists):
     """
     return itertools.product(*lists)
 
-
 def log_result(result):
     # This is called whenever foo_pool(i) returns a result.
     # result_list is modified only by the main process, not the pool workers.
@@ -54,6 +54,7 @@ def run_parallel(
     func,
     args_iterator,
     nprocs_to_use,
+    description=None,
     kwargs={}, 
 ):
     """
@@ -75,7 +76,7 @@ def run_parallel(
     iter_copy = copy(args_iterator)
     
     total = len(list(iter_copy))
-    pbar = tqdm(total=total)
+    pbar = tqdm(total=total, desc=description)
     results = [] 
     def update(*a):
         # This is called whenever a process returns a result.
@@ -98,7 +99,7 @@ def run_parallel(
         if isinstance(args, str):
             args = (args,)
          
-        p = pool.apply_async(LogExceptions(func), args=args, kwargs=kwargs, callback=update)
+        p = pool.apply_async(LogExceptions(func), args=args, callback=update)
         ps.append(p)
         
     pool.close()

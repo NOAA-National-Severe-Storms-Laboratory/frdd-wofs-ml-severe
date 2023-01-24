@@ -9,10 +9,6 @@ from sklearn.model_selection import train_test_split
 import random
 
 
-
-
-
-
 class IO:
     
     INFO = ['forecast_time_index', 'obj_centroid_x', 'obj_centroid_y', 'Run Date', 'label']
@@ -20,14 +16,13 @@ class IO:
     def __init__(self, basePath = '/work/mflora/ML_DATA/DATA'):
         self.basePath = basePath 
     
-    
     def _train_test_split(self):
         """
         Randomly split the full dataset into training and testing 
         based on the date. 
         """
-        for time in ['first_hour', 'second_hour']:
-
+        for time in ['first_hour', 'second_hour', 'third_hour', 'fourth_hour']:
+            
             path = join(self.basePath, f'wofs_ml_severe__{time}__data.feather')
             print(f'Loading {path}...')
             df = pd.read_feather(path)
@@ -45,7 +40,6 @@ class IO:
             train_df.reset_index(inplace=True, drop=True)
             test_df.reset_index(inplace=True, drop=True)
             
-    
             print(f'Saving the {time} training and testing datasets...')
             train_df.to_feather(join(self.basePath, f'wofs_ml_severe__{time}__train_data.feather'))
             test_df.to_feather(join(self.basePath, f'wofs_ml_severe__{time}__test_data.feather'))
@@ -79,45 +73,153 @@ class IO:
         pass
         
         
-def load_ml_data(lead_time = 'first_hour', 
-                 mode = 'train',
-                 cols_to_drop = ['label', 'obj_centroid_x', 
-                                 'obj_centroid_y', 'Run Date', 
-                                 'forecast_time_index'], 
-                target_col = 'hail_severe_3km_obj_match',
-                sanity_check=False 
+# Convert New to Old 
+def resample_to_old_dataset(df, original_dates):
+    df_copy = df.copy()
+    new_dates = df['Run Date'].apply(str)
+    
+    # Get the indices of dates within the old dates 
+    cond = new_dates.isin(np.unique(original_dates))
+    inds = np.where(cond==True)[0]
+    df_copy_sub = df_copy.iloc[inds]
+    df_copy_sub.reset_index(drop=True, inplace=True)
+    
+    return df_copy_sub
+
+def load_ml_data(target_col, 
+                 lead_time = 'first_hour', 
+                 mode = None, 
+                 baseline=False,
+                 return_df=False, 
                 ): 
-    """ Loads the ML dataset. """
+    """ Loads the ML dataset. 
+    
+    Parameters
+    ---------------------
+    
+    target_col : str or list 
+        The target column. If a list, then the different columns are summed together 
+        and re-binarized; this is useful for creating all-severe or all-sig-severe targets.
+        
+    lead_time : 'first_hour', 'second_hour', 'third_hour', or 'fourth_hour'
+        The lead time range.
+        
+    mode : 'training', 'testing' or None (default is None).
+        If 'training' or 'testing', the dataset is loaded with the dates from the 
+        original dates from the Flora et al. (2021, MWR) paper (for a given hazard 
+        and lead time). Otherwise, if None, the full dataset (2017-2021 at the moment) is loaded, 
+        but only from dates between March-July. 
+        
+    Returns
+    --------------------
+    X : dataframe 
+        Input features 
+        
+    y : 1d array
+        Target vector
+        
+    metadata : dataframe 
+        Metadata containing the following data: 
+        'Run Date', 'forecast_time_index', 'Initialization Time', 'label', 'obj_centroid_y', 'obj_centroid_x'
+    
+    """
     # Target Var : [tornado|wind|hail]_[severe|sig_severe]_[3km, 9km, 15km, 30km]_[obj_match | ]
     #base_path = '/work/mflora/ML_DATA/MLDATA'
     #file_path = join(base_path, f'wofs_ml_severe__{lead_time}__{mode}_data.feather')
     
-    if sanity_check:
-        base_path = '/work/mflora/ML_DATA/DATA'
-        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__data.feather')
+    base_path = '/work/mflora/ML_DATA/DATA'
+    if baseline:
+        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__baseline_data.feather')
     else:
-        base_path = '/work/mflora/ML_DATA/MLDATA'
-        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__{mode}_data.feather')
-        
+        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__data.feather')
+    
     df = pd.read_feather(file_path)
+ 
+    if mode is None:
+        print('Only keeping warm season cases for the official training!') 
+        df = df[pd.to_datetime(df['Run Date']).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
+    else:
+        if isinstance(target_col, list):
+            raise ValueError('At this time, cannot load all severe or all sig severe for the retrospective stuff')
+        
+        target = target_col.split('_severe_')[0]
+        target = f'severe_{target}' if target != 'tornado' else target
+        
+        if lead_time in ['third_hour', 'fourth_hour']:
+            lead_time = 'second_hour'
+        
+        dates = pd.read_feather(f'/work/mflora/ML_DATA/DATA/original_dates/{mode}_{lead_time}_{target}_dates.feather')
+        original_dates = dates['Dates'].values 
+    
+        df = resample_to_old_dataset(df, original_dates)
 
-    metadata = df[['Run Date', 'forecast_time_index', 'Initialization Time', 'label']]
-    index = list(df.columns).index('hail_severe_3km_obj_match')
-    possible_features = list(df.columns)[:index]
+    
+    metadata = df[['Run Date', 'forecast_time_index', 'Initialization Time', 'label', 'obj_centroid_y', 'obj_centroid_x']]
+    
+    features = [f for f in df.columns if 'severe' not in f]
 
-    drop_vars = ['QVAPOR', 'freezing_level', 'stp', 'okubo_weiss', 'Initialization Time', 
-                 'qv_2', 'srh_0to500'
-                ]
-    
-    features = [f for f in possible_features if f not in cols_to_drop]
-    
-    if sanity_check:
-        features = [f for f in features if not any([d in f for d in drop_vars])]
-    
     X = df[features]
-    y = df[target_col]
+    
+    if isinstance(target_col, list):
+        # Convert to all-severe.
+        y = df[target_col].values
+        y = np.where(np.sum(y, axis=1)>0, 1, 0)
+    else:
+        y = df[target_col]
 
-    return X,y, metadata     
+    if return_df:
+        return X, y, metadata, df
+    else:
+        return X,y, metadata     
         
-        
+"""
+'tornado_severe_0km',
+ 'tornado_severe_6km',
+ 'tornado_severe_15km',
+ 'tornado_severe_original',
+ 'hail_severe_0km',
+ 'hail_severe_6km',
+ 'hail_severe_15km',
+ 'hail_severe_original',
+ 'wind_severe_0km',
+ 'wind_severe_6km',
+ 'wind_severe_15km',
+ 'wind_severe_original',
+ 'tornado_sig_severe_0km',
+ 'tornado_sig_severe_6km',
+ 'tornado_sig_severe_15km',
+ 'tornado_sig_severe_original',
+ 'hail_sig_severe_0km',
+ 'hail_sig_severe_6km',
+ 'hail_sig_severe_15km',
+ 'hail_sig_severe_original',
+ 'wind_sig_severe_0km',
+ 'wind_sig_severe_6km',
+ 'wind_sig_severe_15km',
+ 'wind_sig_severe_original',
+ 'tornado_severe__IOWA_0km',
+ 'tornado_severe__IOWA_6km',
+ 'tornado_severe__IOWA_15km',
+ 'tornado_severe__IOWA_original',
+ 'hail_severe__IOWA_0km',
+ 'hail_severe__IOWA_6km',
+ 'hail_severe__IOWA_15km',
+ 'hail_severe__IOWA_original',
+ 'wind_severe__IOWA_0km',
+ 'wind_severe__IOWA_6km',
+ 'wind_severe__IOWA_15km',
+ 'wind_severe__IOWA_original',
+ 'tornado_sig_severe__IOWA_0km',
+ 'tornado_sig_severe__IOWA_6km',
+ 'tornado_sig_severe__IOWA_15km',
+ 'tornado_sig_severe__IOWA_original',
+ 'hail_sig_severe__IOWA_0km',
+ 'hail_sig_severe__IOWA_6km',
+ 'hail_sig_severe__IOWA_15km',
+ 'hail_sig_severe__IOWA_original',
+ 'wind_sig_severe__IOWA_0km',
+ 'wind_sig_severe__IOWA_6km',
+ 'wind_sig_severe__IOWA_15km',
+ 'wind_sig_severe__IOWA_original'
+"""
         

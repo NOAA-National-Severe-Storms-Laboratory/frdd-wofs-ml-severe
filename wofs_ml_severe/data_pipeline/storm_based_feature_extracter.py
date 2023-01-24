@@ -7,6 +7,7 @@
 
 # Python Modules
 import itertools 
+import warnings
 
 # Third Party Modules
 import pandas as pd 
@@ -147,28 +148,32 @@ class StormBasedFeatureExtracter():
         data_vars = list(data.keys())
         
         # Compute the ensemble mean 
-        ens_mean_data = {
-            var+'__ens_mean': np.nanmean(data[var], axis=0)
-            for var in data_vars
-        }
+        with warnings.catch_warnings():
+            # Supress the Runtime Warnings.
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            
+            ens_mean_data = {
+                var+'__ens_mean': np.nanmean(data[var], axis=0)
+                for var in data_vars
+            }
 
-        # Compute the ensemble standard deviation 
-        ens_std_data = {
-            var+'__ens_std': np.nanstd(data[var], axis=0, ddof=1)
-            for var in data_vars
-        }
+            # Compute the ensemble standard deviation 
+            ens_std_data = {
+                var+'__ens_std': np.nanstd(data[var], axis=0, ddof=1)
+                for var in data_vars
+            }
         
-        # Compute the ensemble maximum 
-        ens_max_data = {
-            var+'__ens_max': np.nanmax(data[var], axis=0)
-            for var in data_vars if 'max' in var
-        }
+            # Compute the ensemble maximum 
+            ens_max_data = {
+                var+'__ens_max': np.nanmax(data[var], axis=0)
+                for var in data_vars if 'max' in var
+            }
         
-        # Compute the ensemble minimum for min variables 
-        ens_min_data = {
-        var+'__ens_min': np.nanmin(data[var], axis=0)
-        for var in data_vars if 'min' in var
-        }
+            # Compute the ensemble minimum for min variables 
+            ens_min_data = {
+            var+'__ens_min': np.nanmin(data[var], axis=0)
+            for var in data_vars if 'min' in var
+            }
         
         # Combine the ensemble statistics into a single dict. 
         ensemble_data = {**ens_mean_data, **ens_std_data, **ens_max_data, **ens_min_data}
@@ -384,8 +389,8 @@ class StormBasedFeatureExtracter():
             return features
         else:
             feature_names = []
-            storm_points = {label: np.where( labeled_img == label ) for label in labels}
-            for i, object_label in enumerate( labels):
+            storm_points = {label: np.where(labeled_img == label) for label in labels}
+            for i, object_label in enumerate(labels):
                 n=0
                 c=0
                 for var in var_list:
@@ -478,22 +483,26 @@ class StormBasedFeatureExtracter():
 
     def _generic_function( self, func , input_data, parameter=None ):
         """ A function meant to implement the various function objects in 'set_of_stat_functions'"""
-        if parameter == 'ddof':
-            if len(input_data) ==1:
-                # This accounts for conditional std. where input_data
-                # is a single value, which returns a nan. 
-                return 0.0
-            else:
-                return func(input_data, ddof=1)
+        with warnings.catch_warnings():
+            # Supress the Runtime Warnings.
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+        
+            if parameter == 'ddof':
+                if len(input_data) ==1:
+                    # This accounts for conditional std. where input_data
+                    # is a single value, which returns a nan. 
+                    return 0.0
+                else:
+                    return func(input_data, ddof=1)
             
-        elif parameter is not None:
-            return func( input_data, parameter)
-        else:
-            return func(input_data)
+            elif parameter is not None:
+                return func( input_data, parameter)
+            else:
+                return func(input_data)
 
     def get_object_properties(self, label_img, intensity_img):
         """ Returns the object properties as a pandas.DataFrame """
-        properties =  self.ml_config['MORPHOLOGICAL_FEATURES'] + ['label'] 
+        properties =  self.ml_config['MORPHOLOGICAL_FEATURES'] + ['centroid', 'label'] 
         
         data = regionprops_table(label_img, intensity_img, properties) 
         df = pd.DataFrame(data)

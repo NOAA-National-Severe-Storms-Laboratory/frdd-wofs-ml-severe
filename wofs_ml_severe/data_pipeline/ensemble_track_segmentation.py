@@ -32,7 +32,7 @@ from ..conf.segmentation_config import config
 # -i /scratch/brian.matilla/WoFS_2020/summary_files/WOFS_RLT/20200427/3KM/2100 -d 5 -n 24 --nt 12 --duration 30 
 
 
-def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove_low=True):
+def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove_low=True, previous_method=False):
     """
     Procedure for the ensemble storm track segmentation.
     
@@ -60,18 +60,41 @@ def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove
     deterministic_tracks_binarized = np.where(deterministic_tracks > 0, 1, 0)
     ensemble_probabilities = np.average(deterministic_tracks_binarized, axis=0)
 
-    # Create a copy of the data .
-    new_input_data = np.copy(ensemble_probabilities)
-    
-    # Apply a maximum-val filter to smooth the probabilities.
-    new_input_data = maximum_filter(new_input_data, size=4)
-    
-    # Remove tracks with low probabilities.
-    if remove_low:
-        new_input_data[ensemble_probabilities<=0.12] = 0
+    if previous_method:
+        # These are settings from the 2021 paper and those used in real-time in 2020 and 2021.
+        new_input_data = monte_python.object_identification.quantize_probabilities(
+            np.copy(ensemble_probabilities), ensemble_size)
+
+        param_set = [ {'min_thresh': 0,
+                   'max_thresh': 18,
+                   'data_increment': 1,
+                   'delta': 0,
+                   'area_threshold': 400,
+                   'dist_btw_objects': 15 },
+
+                  {'min_thresh': 5,
+                   'max_thresh': 18,
+                   'data_increment': 1,
+                   'delta': 0,
+                   'area_threshold': 300,
+                   'dist_btw_objects': 25 }
+            ]
+
+        params = {'params': param_set }
         
-    # Apply a minimal gaussian filter for additional smoothing.
-    new_input_data = gaussian_filter(new_input_data, 1.5)*100
+    else:
+        # Create a copy of the data .
+        new_input_data = np.copy(ensemble_probabilities)
+    
+        # Apply a maximum-val filter to smooth the probabilities.
+        new_input_data = maximum_filter(new_input_data, size=4)
+    
+        # Remove tracks with low probabilities.
+        if remove_low:
+            new_input_data[ensemble_probabilities<=0.12] = 0
+        
+        # Apply a minimal gaussian filter for additional smoothing.
+        new_input_data = gaussian_filter(new_input_data, 1.5)*100
 
     
     # Identify the tracks. 
@@ -81,9 +104,10 @@ def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove
                        params = params,  
                        )
     
-    # Reduce the object size due to the maximum filter and gaussian filter 
-    idx = np.where(ensemble_probabilities==0)
-    storm_labels[idx] = 0
+    if not previous_method:
+        # Reduce the object size due to the maximum filter and gaussian filter 
+        idx = np.where(ensemble_probabilities==0)
+        storm_labels[idx] = 0
     
     return storm_labels, ensemble_probabilities
  
@@ -124,7 +148,12 @@ def version_control_procedure(file_path, data_vars, new_ds):
         
             # Finally, set the original variable name to the data from the
             # new dataset. 
-            ds[v] = (['NY', 'NX'], new_ds[v].values)
+            vals = new_ds[v].values
+            print(v, vals.shape, np.ndim(vals))
+            if np.ndim(vals) == 3:
+                ds[v] = (['NE', 'NY', 'NX'], vals)
+            else:
+                ds[v] = (['NY', 'NX'], vals)
         
         # Save the original dataset
         return save_dataset(fname=file_path, dataset=ds)
@@ -132,7 +161,7 @@ def version_control_procedure(file_path, data_vars, new_ds):
     # If the file doesn't exist, then just save the new_ds 
     return save_dataset(fname=file_path, dataset=new_ds)
     
-def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, **kwargs):
+def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, previous_method=True, **kwargs):
     """
     Generates the ENSEMBLETRACK summary file. 
     
@@ -154,7 +183,11 @@ def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, **kwargs):
     VAR = 'w_up'
     
     # Open the netCDF file. 
-    ds = open_dataset(ncfile, decode_times=False)
+    try:
+        ds = open_dataset(ncfile, decode_times=False)
+    except OSError:
+        print(f'Unable to open {ncfile}!') 
+        return ncfile
 
     data_to_label = ds[VAR].values
     
@@ -169,7 +202,8 @@ def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, **kwargs):
     # Identify the ensemble storm tracks. 
     results = identify_ensemble_tracks(deterministic_tracks,
                                            config['ensemble'][f'params'],
-                                           ensemble_size=config['ensemble']['ensemble_size'])
+                                           ensemble_size=config['ensemble']['ensemble_size'], 
+                                      previous_method=previous_method)
         
     field_names = [f'{VAR}__ensemble_tracks', f'{VAR}__ensemble_probabilities']
     data = {field: (['NY','NX'], result) for field, result in zip(field_names, results) }
@@ -198,10 +232,13 @@ def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, **kwargs):
     if debug:
         save_filename = os.path.basename(save_filename)
         
-    print(f'Saving {save_filename}...')
+    ###print(f'Saving {save_filename}...')
     if overwrite:
         # In this case, we want to overwrite the file.
-        save_dataset(fname=save_filename, dataset=dataset)
+        try:
+            save_dataset(fname=save_filename, dataset=dataset)
+        except PermissionError:
+            print(f"PermissionError with {save_filename}! May need to ask Brian for permissions")
     else:
         version_control_procedure(save_filename, dataset.data_vars, dataset)
     
