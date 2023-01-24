@@ -1,0 +1,12 @@
+name: monte_python
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8.10
+  - pip=21.1
+  - scikit-image>=0.19
+  - xarray>=0.18 
+  - scikit-learn=1.0.2
+  - numba=0.56.4
+   
