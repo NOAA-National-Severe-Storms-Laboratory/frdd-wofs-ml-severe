@@ -21,7 +21,7 @@ import xarray as xr
 import pandas as pd
 
 # WoFS modules 
-_base_module_path = '/home/monte.flora/python_packages/master/WoF_post'
+_base_module_path = '/home/monte.flora/python_packages/WoF_post'
 import sys
 sys.path.append(_base_module_path)
 
@@ -68,18 +68,20 @@ class MLDataGenerator:
            Path to the yaml configuration file for the ML.  
     """
     ### Monte: Removed old inputs 08/24/2022.
-    def __init__(self, TEMP=True, retro=False, debug=False, **kwargs):
+    def __init__(self, TEMP=True, retro=False, debug=False, outdir=None, **kwargs):
         
         self.TEMP = TEMP
         self.retro=retro
         self.debug = debug
+        self._outdir = outdir
         
         self.ml_config_path = kwargs.get('ml_config_path', None)
 
     def __call__(self,
                  paths, 
                  n_processors=1, 
-                 realtime=True ):
+                 realtime=True, 
+                outdir=None):
         """Runs the data generator
         
         Parameters
@@ -109,8 +111,8 @@ class MLDataGenerator:
         predict=False if runtype == 'rto' else True
         explain=False if runtype == 'rto' else True
         
-        self.predict=predict
-        self.explain = explain
+        self.predict  = predict
+        self.explain  = explain
         self.realtime = realtime
         
         if isinstance(paths, list):
@@ -150,6 +152,9 @@ class MLDataGenerator:
     
         save_nc_file = ensemble_track_file.replace('ENSEMBLETRACKS', 'MLPROB')
         ###print(f'Saving {save_nc_file}...')
+        if self.debug:
+            save_nc_file = join(self._outdir, basename(save_nc_file))
+        
         save_dataset(save_nc_file, ds)
 
         return save_nc_file
@@ -157,7 +162,7 @@ class MLDataGenerator:
     def is_there_an_object(self, storm_objects):   
         return np.max(storm_objects) > 0
 
-    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ensemble_track_file):
+    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config):
         """
         Produces 2D probabilistic predictions from the ML model and baseline system
         """
@@ -175,7 +180,7 @@ class MLDataGenerator:
             if model_name != 'Baseline':
                 model_dict = load_ml_model(**parameters)
                 model = model_dict['model']
-                features = model_dict['features']
+                features = list(model_dict['X'].columns)
             
                 if self.TEMP:
                     corrected_feature_names = name_mapping(features)
@@ -184,6 +189,7 @@ class MLDataGenerator:
                 else:
                     X = dataframe[features]
                 
+                # Compute the probabilities.
                 predictions = model.predict_proba(X)[:,1]
             else:
                 iso_reg = load_calibration_model(**parameters)
@@ -210,9 +216,10 @@ class MLDataGenerator:
         """Loads the YAML config file for the ML dataset"""
         path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
         if self.ml_config_path is not None:
-              self.ml_config_path = ml_config_path
+              ml_config_path = self.ml_config_path
         else:
             if self.realtime: 
+                print("Loading the real time configuration file...")
                 ml_config_path = join(path, 'ml_config_realtime.yml')
             else:
                 comps = decompose_file_path(path_to_summary_file)
@@ -245,7 +252,7 @@ class MLDataGenerator:
         svr_file= file_dict['svr_file'] 
         ens_files= file_dict['ens_file']
         ml_config = self._load_config(ensemble_track_file) 
-              
+        
         ########
         if self.debug:
             print('REMEMBER THAT DEBUG IS ON!!!!!')
@@ -315,7 +322,7 @@ class MLDataGenerator:
         
             env_data = {**env_data, **svr_data}
         
-            run_date, init_time = self.decompse_path(env_file) 
+            run_date, init_time = self.decompose_path(env_file) 
         
             dataframe = extracter.extract(storm_objects,
                                       intensity_img,
@@ -335,9 +342,27 @@ class MLDataGenerator:
             dataframe['Run Date'] = [int(run_date)] * len(dataframe)
 
             if self.predict:
+                # Add the forecast time index
+                
+                hr_size = 12 
+                hr_rng = np.arange(13)
+                ranges = [hr_rng, hr_rng+hr_size, hr_rng+(2*hr_size), hr_rng+(3*hr_size)]
+                
                 # Check the time index to determine whether it is valid for 0-1 or 1-2 hr. 
-                time = 'first_hour' if int(env_file.split('_')[-4]) <= 20 else 'second_hour'
-                mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, ensemble_track_file)
+                time_index = int(env_file.split('_')[-4])
+                if time_index in ranges[0]:
+                    time = 'first_hour'
+                elif time_index in ranges[1]:
+                    time = 'second_hour'
+                elif time_index in ranges[2]:
+                    time = 'third_hour'
+                else:
+                    time = 'fourth_hour'
+                
+                # Add the forecast time index. 
+                dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
+                
+                mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config)
                 generated_files.append(mlprob)
             
             ensemble_track_ds.close()
@@ -348,7 +373,7 @@ class MLDataGenerator:
                                                        'MLDATA').replace('.nc', '.feather').replace('.json', '.feather')
             
             if self.debug:
-                save_df_file = basename(save_df_file)
+                save_df_file = join(self._outdir, basename(save_df_file))
             
             ###print(f'Saving the dataframe @ {save_df_file}...')
             dataframe.to_feather(save_df_file)
@@ -372,7 +397,9 @@ class MLDataGenerator:
             
                 ###print(f'Saving the explainability dataset @ {subset_fname}...')
                 if self.debug:
-                    subset_fname = basename(subset_fname)
+                    subset_fname = join(self._outdir, basename(subset_fname))
+                    #subset_fname = basename(subset_fname)
+                    
                 df_subset.to_json(subset_fname)
         
             return [ save_df_file, subset_fname ] + generated_files

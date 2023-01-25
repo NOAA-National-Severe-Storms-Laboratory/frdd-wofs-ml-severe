@@ -7,14 +7,14 @@ WIND_THRESHS : [40]
 HAIL_THRESHS : [1.0]
 
 # (in grid points) 
-NMEP_SIZES : [0]
+NMEP_SIZES : [3]
 
 BASELINE_VARS : 
-    tornado_severe_0km : 'uh_nmep_>180_0km__prob_max'
-    hail_severe_0km : 'hail_nmep_>1.0_0km__prob_max'
-    wind_severe_0km : 'wind_nmep_>40_0km__prob_max'
+    tornado : 'uh_nmep_>180_3km__prob_max'
+    severe_hail : 'hail_nmep_>1.0_3km__prob_max'
+    severe_wind : 'wind_nmep_>40_3km__prob_max'
     
-ML_MODEL_PATH : '/work/mflora/ML_DATA/NEW_ML_MODELS'
+ML_MODEL_PATH : '/work/mflora/ML_DATA/MODEL_SAVES/'
 
 RENAME_TARGETS : 
     matched_to_severe_hail_0km : 'Severe Hail' 
@@ -25,14 +25,14 @@ MODEL_NAMES : ['RandomForest',
                'LogisticRegression', 
                'Baseline'
               ]
-TARGETS : ['tornado_severe_0km', 
-           'hail_severe_0km', 
-           'wind_severe_0km',
+TARGETS : ['tornado', 
+           'severe_hail', 
+           'severe_wind'
           ] 
 
-ENS_VARS  : [ 'uh_0to2',
-              'uh_2to5',
-              'wz_0to2',
+ENS_VARS  : [ 'uh_0to2_instant',
+              'uh_2to5_instant',
+              'wz_0to2_instant',
               'comp_dz',
               'ws_80',
               'w_up',
@@ -45,11 +45,9 @@ ENS_VARS  : [ 'uh_0to2',
               'ctt',
               'dbz_3to5', 
               'dbz_1to3', 
-              'okubo_weiss',
-              'dbz_1km', 
 ]
 
-ENV_IN_ENS_VARS : [ 'freezing_level',]
+ENV_IN_ENS_VARS : []
 
 ENV_VARS : [
               'theta_e',
@@ -66,36 +64,23 @@ ENV_VARS : [
               'geo_hgt_850',
               'geo_hgt_500',
               'geo_hgt_700',
-              'td_850',
-              'td_700',
-              'td_500',
-              'QVAPOR_850',
-              'QVAPOR_700',
-              'QVAPOR_500',
-              'qv_2',
 ]
 
 SVR_VARS : [ 'srh_0to1',
              'srh_0to3',
-             'srh_0to500',
              'cape_ml',
              'cin_ml',
              'shear_u_0to6',
              'shear_v_0to6',
              'shear_u_0to1',
              'shear_v_0to1',
-             'shear_u_3to6',
-             'shear_v_3to6',
-             'stp', 
-             'stp_srh0to500',
              'lcl_ml',
            ]
 
 ENS_MIN_VARS : [ 'ctt',
              'buoyancy',
              'div_10m',
-             'w_down',
-             'okubo_weiss',
+             'w_down'
              ]
 
 MORPHOLOGICAL_FEATURES : [
@@ -104,10 +89,36 @@ MORPHOLOGICAL_FEATURES : [
                           'extent',
                           'orientation',
                           'minor_axis_length',
-                          'major_axis_length',
-                          'intensity_max',
+                          'major_axis_length', 
+                          'label', 
                           ]
-                          
+
+
+# TOP PREDICTORS FOR THE DIFFERENT HAZARDS. 
+# Based on Shapley and LR coefficients. 
+# Tornado:
+                   # 0-2 vert. vort (90th)
+                   # hail size (90th)
+                   # 2-5 km UH 
+                   # Composite Refl
+                   # ML CAPE 
+                   
+                   # Hail: 
+                   # 3-5 km Max Refl.
+                   # Updraft 
+                   # Major axis length 
+                   # Composite Refl. (repeat)
+                   # 0-3 km Lapse Rate 
+                   
+                   # Wind:
+                   # 80-m wind speed 
+                   # Composite Refl. (repeat) 
+                   # Minor axis length 
+                   # 0-2 vert vort (repeat) 
+                   # 500-700 mb lapse rate. 
+
+
+
 FEATURE_SUBSET_DICT :  
                    'wz_0to2__time_max__amp_ens_mean' : 'vert_vort' 
                    'hailcast__time_max__amp_ens_mean' : 'hail_size'
@@ -138,3 +149,35 @@ ROUNDING :
     'minor_axis_length' : 0
     '0-3km_lapse_rate' : 2
     '500-700mb_lapse_rate' : 2
+
+
+
+RESAMPLE_DICT : 
+    first_hour : 
+        tornado       :
+            RandomForest      : 'under'
+            LogisticRegression: 'under'
+            XGBoost           : 'under'
+        severe_hail   :
+            RandomForest      : 'under'
+            LogisticRegression: 'under'
+            XGBoost           : None
+        severe_wind :
+            RandomForest      : None
+            LogisticRegression: 'under'
+            XGBoost'           : None
+
+    second_hour: 
+        tornado :
+            RandomForest      : 'under'
+            LogisticRegression: None
+            XGBoost           : 'under'
+        severe_hail :
+            RandomForest      : None
+            LogisticRegression: None
+            XGBoost           : None
+        severe_wind :
+            RandomForest      : 'under'
+            LogisticRegression: None
+            XGBoost           : None
+       

@@ -161,7 +161,7 @@ def version_control_procedure(file_path, data_vars, new_ds):
     # If the file doesn't exist, then just save the new_ds 
     return save_dataset(fname=file_path, dataset=new_ds)
     
-def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, previous_method=True, **kwargs):
+def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True, debug=False, previous_method=True, **kwargs):
     """
     Generates the ENSEMBLETRACK summary file. 
     
@@ -229,10 +229,19 @@ def generate_ensemble_track_file(ncfile, overwrite=True, debug=False, previous_m
     save_filename = kwargs.pop('output_file', 
                                normalize_filename(
                                    ncfile).replace('30M','ENSEMBLETRACKS').replace('scratch','work').replace('_RLT','_ML'))
+    if outdir is not None:
+        if not os.path.exists:
+            os.makedirs(outdir)
+        save_filename = os.path.join(outdir,save_filename) 
+    
     if debug:
-        save_filename = os.path.basename(save_filename)
+        save_filename = os.path.basename(save_filename).replace('.json', '.nc')
+        save_filename = os.path.join(outdir, save_filename)
+        print(f'Saving {save_filename}...')
+        save_dataset(fname=save_filename, dataset=dataset)
+        return save_filename
         
-    ###print(f'Saving {save_filename}...')
+        
     if overwrite:
         # In this case, we want to overwrite the file.
         try:
