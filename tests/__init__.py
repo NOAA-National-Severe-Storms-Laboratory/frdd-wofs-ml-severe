@@ -11,8 +11,8 @@ from glob import glob
 
 # Adding the parent directory to path so that 
 # the package can be imported without being explicitly
-path = os.path.dirname(os.getcwd())
-sys.path.append(path)
+#path = os.path.dirname(os.getcwd())
+#sys.path.append(path)
 
 # WoFS modules 
 _base_module_path = '/home/monte.flora/python_packages/WoF_post'

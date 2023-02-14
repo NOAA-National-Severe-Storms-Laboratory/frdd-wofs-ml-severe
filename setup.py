@@ -2,8 +2,6 @@
 
 import setuptools  # this is the "magic" import
 
-import monte_python
-
 from numpy.distutils.core import setup, Extension
 
 #from setuptools import setup, find_packages
@@ -15,12 +13,12 @@ here = pathlib.Path(__file__).parent.resolve()
 long_description = (here / 'README.md').read_text(encoding='utf-8')
 
 setup(
-    name='monte_python', 
-    version=monte_python.__version__,
-    description='Methods for Object-based and Neighborhood Threat Evaluation in Python', 
+    name='wofs_ml_severe', 
+    version='0.0.2',
+    description='Official WoFS-ML-Severe Repository', 
     long_description=long_description,
     long_description_content_type='text/markdown',  
-    url='https://github.com/WarnOnForecast/MontePython', 
+    url='https://github.com/WarnOnForecast/wofs_ml_severe', 
     author='NOAA National Severe Storms Laboratory', 
     classifiers=[  # Optional
         # How mature is this project? Common values are
@@ -32,18 +30,28 @@ setup(
         'Programming Language :: Python :: 3'
     ],
     install_requires = [
-        'scikit-learn',
-        'scikit-image>=0.18.1',
-        'matplotlib<=3.4.3',
-        'xarray >=0.21.1',
-        'numba',
-        'numba-kdtree'
+        'scikit-learn==1.0.2',
+        'scikit-image>=0.19',
+        'hyperopt==0.2.7', 
+        'numpy',
+        'scipy',
+        'pandas', 
+        'xarray>=0.18',
+        'scikit-learn-intelex==2023.0.1',
+        'xgboost==1.7.1',
+        'imbalanced-learn==0.10.1',
     ],
-    packages=['monte_python', 'monte_python._plot'],  # Required
+    package_data={'wofs_ml_severe' : ['conf/ml_config_2017.yml', 
+                                      'conf/ml_config_2018-19.yml', 
+                                      'conf/ml_config_2020-current.yml', 
+                                      'conf/ml_config_realtime.yml', 
+                                      'conf/ml_config_retro.yml']},
+    packages=['wofs_ml_severe', 'wofs_ml_severe.common', 'wofs_ml_severe.data_pipeline', 'wofs_ml_severe.io', 
+              'wofs_ml_severe.evaluate', 'wofs_ml_severe.conf'],  # Required
     python_requires='>=3.8, <4',
-    package_dir={'monte_python': 'monte_python'},
+    package_dir={'wofs_ml_severe': 'wofs_ml_severe'},
     project_urls={  # Optional
-        'Bug Reports': 'https://github.com/WarnOnForecast/MontePython/issues',
-        'Source': 'https://github.com/WarnOnForecast/MontePython',
+        'Bug Reports': 'https://github.com/WarnOnForecast/wofs_ml_severe/issues',
+        'Source': 'https://github.com/WarnOnForecast/wofs_ml_severe',
     },
 )
