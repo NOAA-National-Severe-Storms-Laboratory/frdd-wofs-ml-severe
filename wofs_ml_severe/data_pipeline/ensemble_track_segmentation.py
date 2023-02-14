@@ -26,13 +26,10 @@ from wofs.common import remove_reserved_keys
 
 from ..conf.segmentation_config import config
 
-#from wofs.post.multiprocessing_script import run_parallel_realtime, to_iterator
 
-# python wofs_probability_tracks.py 
-# -i /scratch/brian.matilla/WoFS_2020/summary_files/WOFS_RLT/20200427/3KM/2100 -d 5 -n 24 --nt 12 --duration 30 
-
-
-def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove_low=True, previous_method=False):
+def identify_ensemble_tracks(deterministic_tracks, 
+                             params, ensemble_size, 
+                             split_regions=True):
     """
     Procedure for the ensemble storm track segmentation.
     
@@ -47,10 +44,6 @@ def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove
     ensemble_size : int 
         Ensemble size 
         
-    remove_low : bool
-        If True, remove tracks with probabilities <= 0.12 (3 ensemble members)
-    
-    
     Returns
     ------------
     storm_labels : array of shape (NY, NX)
@@ -60,12 +53,11 @@ def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove
     deterministic_tracks_binarized = np.where(deterministic_tracks > 0, 1, 0)
     ensemble_probabilities = np.average(deterministic_tracks_binarized, axis=0)
 
-    if previous_method:
-        # These are settings from the 2021 paper and those used in real-time in 2020 and 2021.
-        new_input_data = monte_python.object_identification.quantize_probabilities(
-            np.copy(ensemble_probabilities), ensemble_size)
+    # These are settings from the 2021 paper and those used in real-time in 2020 and 2021.
+    new_input_data = monte_python.object_identification.quantize_probabilities(
+    np.copy(ensemble_probabilities), ensemble_size)
 
-        param_set = [ {'min_thresh': 0,
+    param_set = [ {'min_thresh': 0,
                    'max_thresh': 18,
                    'data_increment': 1,
                    'delta': 0,
@@ -80,34 +72,28 @@ def identify_ensemble_tracks(deterministic_tracks, params, ensemble_size, remove
                    'dist_btw_objects': 25 }
             ]
 
-        params = {'params': param_set }
+    params = {'params': param_set }
         
-    else:
-        # Create a copy of the data .
-        new_input_data = np.copy(ensemble_probabilities)
-    
-        # Apply a maximum-val filter to smooth the probabilities.
-        new_input_data = maximum_filter(new_input_data, size=4)
-    
-        # Remove tracks with low probabilities.
-        if remove_low:
-            new_input_data[ensemble_probabilities<=0.12] = 0
-        
-        # Apply a minimal gaussian filter for additional smoothing.
-        new_input_data = gaussian_filter(new_input_data, 1.5)*100
-
-    
     # Identify the tracks. 
-    storm_labels = monte_python.label(input_data = new_input_data, 
+    storm_labels, object_props = monte_python.label(input_data = new_input_data, 
                        method ='iterative_watershed', 
-                       return_object_properties=False, 
+                       return_object_properties=True, 
                        params = params,  
                        )
+
+    # Add QC 
+    qcer = monte_python.QualityControler()
+    if split_regions: 
+        qc_params = [('max_area_before_split', 1000), ('trim', (6/18, 4/18) )]
+    else:
+        qc_params = [('trim', (6/18, 4/18) )]
     
-    if not previous_method:
-        # Reduce the object size due to the maximum filter and gaussian filter 
-        idx = np.where(ensemble_probabilities==0)
-        storm_labels[idx] = 0
+    try:
+        storm_labels, _ = qcer.quality_control(ensemble_probabilities, storm_labels, object_props, qc_params)
+    except AssertionError:
+        print('Splitting failed!')
+        qc_params = [('trim', (6/18, 4/18) )]
+        storm_labels, _ = qcer.quality_control(ensemble_probabilities, storm_labels, object_props, qc_params)
     
     return storm_labels, ensemble_probabilities
  
@@ -161,7 +147,8 @@ def version_control_procedure(file_path, data_vars, new_ds):
     # If the file doesn't exist, then just save the new_ds 
     return save_dataset(fname=file_path, dataset=new_ds)
     
-def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True, debug=False, previous_method=True, **kwargs):
+def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True, 
+                                 debug=False,  **kwargs):
     """
     Generates the ENSEMBLETRACK summary file. 
     
@@ -202,14 +189,13 @@ def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True, debug=Fals
     # Identify the ensemble storm tracks. 
     results = identify_ensemble_tracks(deterministic_tracks,
                                            config['ensemble'][f'params'],
-                                           ensemble_size=config['ensemble']['ensemble_size'], 
-                                      previous_method=previous_method)
-        
+                                           ensemble_size=config['ensemble']['ensemble_size'] 
+                                      )
+    
     field_names = [f'{VAR}__ensemble_tracks', f'{VAR}__ensemble_probabilities']
     data = {field: (['NY','NX'], result) for field, result in zip(field_names, results) }
     data['updraft_tracks'] = (['NE', 'NY', 'NX'], deterministic_tracks)
-    
-    
+
     # Convert the data to xarray.Dataset.
     dataset = xr.Dataset(data)
     

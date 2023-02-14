@@ -6,7 +6,26 @@ import numpy as np
 import pandas as pd
 from skimage.measure import regionprops
 import traceback
-##import os
+from os.path import basename, dirname
+from datetime import timedelta 
+
+def get_init_time(filename):
+    
+    init_time = basename(dirname(filename))
+    init_date = basename(dirname(dirname(filename)))
+    
+    return init_date+init_time
+                         
+
+def get_valid_time(filename, offset=6, dt=5):
+    comps = decompose_file_path(filename)
+    init_time = get_init_time(filename)
+
+    valid_duration = int(comps['TIME_INDEX'])*dt - (offset*dt)
+    start_time=(pd.to_datetime(init_time)+timedelta(minutes=valid_duration)).strftime('%Y%m%d%H%M')
+    
+    return start_time
+
 
 class MatchReportsToTracks:
     """Produces the MLTARGETS dataframe."""
@@ -17,18 +36,15 @@ class MatchReportsToTracks:
                 reports_path='/work/mflora/LSRS/STORM_EVENTS_2017-2022.csv', 
                 report_type='NOAA'):
         """ Get the storm reports for the forecast period. """
-        # Determine the initial time from the ncfile 
-        comps = decompose_file_path(ncfile)
-        
         # The track files have the initial and end of a 30-min time period
         # so we want to use the valid date and init time for the matching. 
-        init_time = comps['VALID_DATE']+comps['INIT_TIME']
+        init_time = get_valid_time(ncfile) 
         report = StormReportLoader(
             reports_path,
             report_type,
             init_time, 
             forecast_length=30,
-            err_window=15, 
+            err_window=5, 
             )
  
         report_lsrs = StormReportLoader(
@@ -36,7 +52,7 @@ class MatchReportsToTracks:
             'IOWA',
             init_time, 
             forecast_length=30,
-            err_window=15, 
+            err_window=5, 
             )
  
         ds = xr.load_dataset(ncfile)

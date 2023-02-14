@@ -81,7 +81,7 @@ class MLDataPipeline(Emailer):
         self.out_path = out_path 
         
         if dates is None:
-            self.dates = [d for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
+            self.dates = [d.split('_')[0] for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
             self.send_email_bool = True
             self.times=None
             self._NT = 36
@@ -189,7 +189,6 @@ class MLDataPipeline(Emailer):
                 mlops(paths, 
                       n_processors=self.n_jobs, 
                       realtime=False,)
-              
             except:
                 print(traceback.format_exc())
                 
@@ -248,7 +247,7 @@ class MLDataPipeline(Emailer):
         old_df = pd.concat([feature_df, target_df], axis=1) 
         df = old_df.copy()
         
-        df['forecast_time_index'] = np.array(forecast_time_index, dtype=np.int8) 
+        #df['forecast_time_index'] = np.array(forecast_time_index, dtype=np.int8) 
         
         hr_size = 12 
         hr_rng = np.arange(13)

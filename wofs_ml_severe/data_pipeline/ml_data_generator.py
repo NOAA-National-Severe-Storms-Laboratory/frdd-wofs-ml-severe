@@ -341,6 +341,10 @@ class MLDataGenerator:
             # Add the run date
             dataframe['Run Date'] = [int(run_date)] * len(dataframe)
 
+            # Add the forecast time index. 
+            time_index = decompose_file_path(env_file)['TIME_INDEX']
+            dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
+            
             if self.predict:
                 # Add the forecast time index
                 
@@ -358,9 +362,6 @@ class MLDataGenerator:
                     time = 'third_hour'
                 else:
                     time = 'fourth_hour'
-                
-                # Add the forecast time index. 
-                dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
                 
                 mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config)
                 generated_files.append(mlprob)
