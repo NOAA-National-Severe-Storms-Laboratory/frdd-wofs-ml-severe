@@ -23,7 +23,7 @@ import pandas as pd
 # WoFS modules 
 _base_module_path = '/home/monte.flora/python_packages/WoF_post'
 import sys
-sys.path.append(_base_module_path)
+sys.path.insert(0, _base_module_path)
 
 from ..common.multiprocessing_utils import run_parallel, to_iterator
 from ..common.util import decompose_file_path
@@ -259,7 +259,12 @@ class MLDataGenerator:
         ########
         
         # See if there are tracks
-        ensemble_track_ds = open_dataset(ensemble_track_file, decode_times=False)
+        try:
+            ensemble_track_ds = open_dataset(ensemble_track_file, decode_times=False)
+        except OSError:
+            print(f'Unable to load {ensemble_track_file}')
+            return None
+            
         storm_objects = ensemble_track_ds['w_up__ensemble_tracks'].values
         intensity_img = ensemble_track_ds['w_up__ensemble_probabilities'].values
         updraft_tracks = ensemble_track_ds['updraft_tracks'].values
@@ -269,8 +274,13 @@ class MLDataGenerator:
             # Load ENV file
             ds_env = open_dataset(env_file, decode_times=False)
             ds_subset = ds_env[['xlat', 'xlon', 'hgt']]
-            env_data = {var: ds_env[var].values for var in ml_config['ENV_VARS']}
-
+            try:
+                env_data = {var: ds_env[var].values for var in ml_config['ENV_VARS']}
+            except:
+                print(f"Issue with {env_file}. Likely due to the missing variable for eariler WoFS years!")
+                ds_env.close()
+                return None
+                
             if self.TEMP: 
                 # Convert lapse rate from C/KM back to C 
                 env_data['mid_level_lapse_rate'] = env_data['mid_level_lapse_rate']*2.67765
@@ -292,8 +302,13 @@ class MLDataGenerator:
 
             # Load the SVR file
             ds_svr = open_dataset(svr_file, decode_times=False)
-            svr_data = {var: ds_svr[var].values for var in ml_config['SVR_VARS']}
-
+            try:
+                svr_data = {var: ds_svr[var].values for var in ml_config['SVR_VARS']}
+            except:
+                print(f"Issue with {svr_file}. Likely due to the missing SRH0to1")
+                ds_env.close()
+                return None 
+                
             coord_vars = ["xlat", "xlon", "hgt"]
             try:
                 multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
@@ -305,9 +320,21 @@ class MLDataGenerator:
                     load_vars=ml_config['ENS_VARS']
                     load_vars.remove('uh_0to2')
                     load_vars.append('uh_0to2_instant')
-                    multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
-                        ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=ml_config['ENS_VARS']) 
-                
+                    try:
+                        multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
+                            ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=load_vars) 
+                    except KeyError:
+                        load_vars.remove('wz_0to2')
+                        load_vars.append('wz_0to2_instant')
+                        try:
+                            multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
+                                ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=load_vars) 
+                        except:
+                            print(f"Issue with {ens_files[0]}. Likely due to the instant UH or WZ, or buoyancy")
+                            ds_env.close()
+                            ds_svr.close()
+                            del ds_env, ds_svr
+                            return None 
                 
             # Correct the naming convention. 
             multiple_datasets_dict = self._correct_naming(multiple_datasets_dict)
@@ -319,18 +346,26 @@ class MLDataGenerator:
                 storm_ds['ctt'] = (5./9.) * (storm_ds['ctt'] - 32.)
             
             extracter = StormBasedFeatureExtracter(ml_config, TEMP=self.TEMP)
-        
+
             env_data = {**env_data, **svr_data}
         
             run_date, init_time = self.decompose_path(env_file) 
-        
-            dataframe = extracter.extract(storm_objects,
+            
+            try:
+                dataframe = extracter.extract(storm_objects,
                                       intensity_img,
                                       storm_ds, 
                                        env_data, 
                                        init_time=str(init_time),
                                         updraft_tracks=updraft_tracks,
                                      ) 
+            except:
+                print(f"Issue with {ens_files[0]}. In the past it was a ValueError where lengths didn't match up for area ratio.")
+                storm_ds.close()
+                ds_env.close()
+                ds_svr.close()
+                del storm_ds, ds_env, ds_svr
+                return None 
 
             # Close the netcdf files
             storm_ds.close()

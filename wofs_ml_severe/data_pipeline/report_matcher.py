@@ -1,6 +1,9 @@
+
+
 from monte_python.object_matching import match_to_lsrs, ObjectMatcher
 from .storm_report_loader import StormReportLoader
-from wofs_ml_severe.common.util import decompose_file_path
+from ..common.util import decompose_file_path
+
 import xarray as xr 
 import numpy as np
 import pandas as pd
@@ -54,8 +57,11 @@ class MatchReportsToTracks:
             forecast_length=30,
             err_window=5, 
             )
- 
-        ds = xr.load_dataset(ncfile)
+        try: 
+            ds = xr.load_dataset(ncfile)
+        except OSError:
+            print( f'{ncfile} was unable to load! Might be permission issues or the weird Dec Cases')
+            return None
         
         try:
             grid_ds = report.to_grid(dataset=ds)
@@ -89,7 +95,12 @@ class MatchReportsToTracks:
     
         Multiple matching minimum matching distances are used. 
         """
-        tracks_ds = xr.load_dataset(track_file, decode_times=False)
+        try:
+            tracks_ds = xr.load_dataset(track_file, decode_times=False)
+        except:
+            print( f'{track_file} was unable to load! Might be permission issues or the weird Dec Cases')
+            return None
+            
         tracks = tracks_ds['w_up__ensemble_tracks'].values
         ens_probs = tracks_ds['w_up__ensemble_probabilities'].values
     

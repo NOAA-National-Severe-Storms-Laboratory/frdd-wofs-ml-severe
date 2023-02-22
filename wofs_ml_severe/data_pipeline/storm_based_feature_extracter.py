@@ -18,9 +18,9 @@ import xarray as xr
 
 # Temporary until the ML models are re-trained 
 # with the new naming convention!!!
-_base_module_path = '/home/monte.flora/python_packages/master/WoF_post'
+_base_module_path = '/home/monte.flora/python_packages/WoF_post'
 import sys
-sys.path.append(_base_module_path)
+sys.path.insert(0, _base_module_path)
 from wofs.post.utils import convert_to_seconds
 
 class StormBasedFeatureExtracter():
@@ -529,8 +529,13 @@ class StormBasedFeatureExtracter():
         ---------------
         ratios : array-like shape (n_labels)
         """
+        # Get the list of ensemble storm track labels
         labels = np.unique(ensemble_tracks)[1:]
+        # Initialize the ratios array 
         ratios = np.zeros(len(labels), dtype=np.float32)
+        
+        
+        # Iterate on the labels 
         for i,label in enumerate(labels):
             points = np.where(ensemble_tracks==label)
             ensemble_area = np.count_nonzero(ensemble_tracks[ensemble_tracks==label])
@@ -539,6 +544,7 @@ class StormBasedFeatureExtracter():
             avg_area = np.mean([np.count_nonzero(updraft_tracks[n,:,:][points])
                         for n in range(updraft_tracks.shape[0])])
 
+            
             ratios[i] = avg_area / ensemble_area
 
         return ratios

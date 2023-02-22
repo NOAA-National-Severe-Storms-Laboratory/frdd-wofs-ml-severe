@@ -14,9 +14,9 @@ import numpy as np
 from scipy.ndimage import maximum_filter, gaussian_filter
 
 # WoFS modules 
-_base_module_path = '/home/monte.flora/python_packages/master/WoF_post'
+_base_module_path = '/home/monte.flora/python_packages/WoF_post'
 import sys
-sys.path.append(_base_module_path)
+sys.path.insert(0,_base_module_path)
 
 import monte_python
 from wofs.post.wofs_cbook import identify_deterministic_tracks
@@ -80,7 +80,7 @@ def identify_ensemble_tracks(deterministic_tracks,
                        return_object_properties=True, 
                        params = params,  
                        )
-
+    """
     # Add QC 
     qcer = monte_python.QualityControler()
     if split_regions: 
@@ -94,6 +94,7 @@ def identify_ensemble_tracks(deterministic_tracks,
         print('Splitting failed!')
         qc_params = [('trim', (6/18, 4/18) )]
         storm_labels, _ = qcer.quality_control(ensemble_probabilities, storm_labels, object_props, qc_params)
+    """
     
     return storm_labels, ensemble_probabilities
  
