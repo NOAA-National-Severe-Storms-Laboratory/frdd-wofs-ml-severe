@@ -11,6 +11,7 @@ from os.path import join, basename, dirname
 import argparse
 import itertools
 import pathlib
+import gc 
 # Only model pickle files
 import os, sys
 sys.path.append(os.getcwd())
@@ -43,6 +44,38 @@ from .storm_based_feature_extracter import StormBasedFeatureExtracter
 # Temporary until the ML models are re-trained 
 # with the new naming convention!!!
 from .name_mapper import name_mapping
+
+def is_list(a):
+    return isinstance(a, list)
+
+def get_time_str(time_index): 
+    hr_size = 12 
+    blend_period = 5
+    hr_rng = np.arange(13)
+    ranges = {'first_hour' : hr_rng, 
+              'second_hour' : hr_rng+hr_size, 
+              'third_hour' : hr_rng+(2*hr_size), 
+              'fourth_hour': hr_rng+(3*hr_size)
+             }
+
+    if time_index in ranges['first_hour']:
+        time = 'first_hour'
+        
+    elif time_index in ranges['second_hour'][:blend_period]:
+        time = ['first_hour', 'second_hour']
+    elif time_index in ranges['second_hour'][blend_period:]:
+        time = 'second_hour'
+        
+    elif time_index in ranges['third_hour'][:blend_period]:
+        time = ['second_hour', 'third_hour']
+    elif time_index in ranges['third_hour'][blend_period:]:
+        time = 'third_hour'
+    elif time_index in ranges['fourth_hour'][:blend_period]:
+         time = ['third_hour', 'fourth_hour']
+    else:
+        time = 'fourth_hour'
+        
+    return time
 
 
 class MLDataGenerator: 
@@ -168,49 +201,60 @@ class MLDataGenerator:
         """
         prediction_data = {}
         object_labels = dataframe['label']
+        times = [time] if not is_list(time) else time
+        
         for pair in itertools.product(ml_config['MODEL_NAMES'], ml_config['TARGETS']):
             model_name, target = pair
             parameters = {
-                'time' : time,
                 'target' : target,
                 'drop_opt' : '',
                 'model_name' : model_name,
                 'ml_config' : ml_config,
             }
             if model_name != 'Baseline':
-                model_dict = load_ml_model(**parameters)
-                model = model_dict['model']
-                features = list(model_dict['X'].columns)
+                predictions = []
+                for time in times: 
+                    parameters['time'] = time
+                    model_dict = load_ml_model(**parameters)
+                    model = model_dict['model']
+                    features = list(model_dict['X'].columns)
             
-                if self.TEMP:
-                    corrected_feature_names = name_mapping(features)
-                    new_features = [corrected_feature_names.get(f,f) for f in features]
-                    X = dataframe[new_features]
-                else:
-                    X = dataframe[features]
+                    if self.TEMP:
+                        corrected_feature_names = name_mapping(features)
+                        new_features = [corrected_feature_names.get(f,f) for f in features]
+                        X = dataframe[new_features]
+                    else:
+                        X = dataframe[features]
                 
-                # Compute the probabilities.
-                predictions = model.predict_proba(X)[:,1]
+                    # Compute the probabilities.
+                    predictions.append(model.predict_proba(X)[:,1])
             else:
-                iso_reg = load_calibration_model(**parameters)
-                raw_predictions = dataframe[ml_config['BASELINE_VARS'][target]].values
-                predictions = iso_reg.predict(raw_predictions)
+                predictions = []
+                for time in times: 
+                    parameters['time'] = time
+                
+                    iso_reg = load_calibration_model(**parameters)
+                    raw_predictions = dataframe[ml_config['BASELINE_VARS'][target]].values
+                    predictions.append(iso_reg.predict(raw_predictions))
         
+            # Average together predictions during the transition period.     
+            predictions = np.mean(predictions, axis=0) 
+            
             predictions_2d = self.to_2d(predictions, storm_objects, object_labels, shape_2d=storm_objects.shape)
             prediction_data[f'{model_name}__{target}'] = (['NY', 'NX'], predictions_2d)
     
         return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file)
 
     
-    def _correct_naming(self, data):
-        """ Remove the '_instant' for the intra-storm variables like UH"""
-        varnames = list(data.keys())
-        for v in varnames:
-            if 'instant' in v:
-                data[v.split('_instant')[0]] = data[v]
-                del data[v]
+    #def _correct_naming(self, data):
+    #    """ Remove the '_instant' for the intra-storm variables like UH"""
+    #    varnames = list(data.keys())
+    #    for v in varnames:
+    #        if 'instant' in v:
+    #            data[v.split('_instant')[0]] = data[v]
+    #            del data[v]
     
-        return data 
+    #   return data 
     
     def _load_config(self, path_to_summary_file):
         """Loads the YAML config file for the ML dataset"""
@@ -218,18 +262,18 @@ class MLDataGenerator:
         if self.ml_config_path is not None:
               ml_config_path = self.ml_config_path
         else:
-            if self.realtime: 
-                print("Loading the real time configuration file...")
-                ml_config_path = join(path, 'ml_config_realtime.yml')
-            else:
-                comps = decompose_file_path(path_to_summary_file)
-                year = comps['VALID_DATE'][:4]
-                if year == '2017':
-                    ml_config_path = join(path, 'ml_config_2017.yml')
-                elif year in ['2018', '2019']:
-                    ml_config_path = join(path, 'ml_config_2018-19.yml')
-                else:
-                    ml_config_path = join(path, 'ml_config_2020-current.yml')
+            #if self.realtime: 
+            #print("Loading the real time configuration file...")
+            ml_config_path = join(path, 'ml_config_realtime.yml')
+            #else:
+            #    comps = decompose_file_path(path_to_summary_file)
+            #    year = comps['VALID_DATE'][:4]
+            #    if year == '2017':
+            #        ml_config_path = join(path, 'ml_config_2017.yml')
+            #    elif year in ['2018', '2019']:
+            #        ml_config_path = join(path, 'ml_config_2018-19.yml')
+            #    else:
+            #        ml_config_path = join(path, 'ml_config_2020-current.yml')
         
         ###print(f'{ml_config_path=}')
         return load_yaml(ml_config_path)
@@ -279,6 +323,7 @@ class MLDataGenerator:
             except:
                 print(f"Issue with {env_file}. Likely due to the missing variable for eariler WoFS years!")
                 ds_env.close()
+                gc.collect()
                 return None
                 
             if self.TEMP: 
@@ -307,37 +352,22 @@ class MLDataGenerator:
             except:
                 print(f"Issue with {svr_file}. Likely due to the missing SRH0to1")
                 ds_env.close()
+                gc.collect()
                 return None 
                 
             coord_vars = ["xlat", "xlon", "hgt"]
             try:
                 multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
                         ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=ml_config['ENS_VARS'])
-            except KeyError:
-                print(f"Issue: {ens_files[0]}, {ml_config['ENS_VARS']}")
-                print('Manually replacing uh_0to2...')
-                if 'uh_0to2' in ml_config['ENS_VARS']:
-                    load_vars=ml_config['ENS_VARS']
-                    load_vars.remove('uh_0to2')
-                    load_vars.append('uh_0to2_instant')
-                    try:
-                        multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
-                            ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=load_vars) 
-                    except KeyError:
-                        load_vars.remove('wz_0to2')
-                        load_vars.append('wz_0to2_instant')
-                        try:
-                            multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
-                                ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=load_vars) 
-                        except:
-                            print(f"Issue with {ens_files[0]}. Likely due to the instant UH or WZ, or buoyancy")
-                            ds_env.close()
-                            ds_svr.close()
-                            del ds_env, ds_svr
-                            return None 
-                
+            except: 
+                gc.collect()
+                print(f"Issue with {ens_files}. Likely a missing variable ('uh_0to2')")
+                return None 
+        
             # Correct the naming convention. 
-            multiple_datasets_dict = self._correct_naming(multiple_datasets_dict)
+            # Deprecated on 23 FEB 2023. Keeping the 'instant' distinction lets
+            # me know which type I am using. 
+            ##multiple_datasets_dict = self._correct_naming(multiple_datasets_dict)
            
             storm_ds = xr.Dataset(multiple_datasets_dict)
             
@@ -351,21 +381,23 @@ class MLDataGenerator:
         
             run_date, init_time = self.decompose_path(env_file) 
             
-            try:
-                dataframe = extracter.extract(storm_objects,
+            #try:
+            dataframe = extracter.extract(storm_objects,
                                       intensity_img,
                                       storm_ds, 
                                        env_data, 
                                        init_time=str(init_time),
                                         updraft_tracks=updraft_tracks,
                                      ) 
-            except:
-                print(f"Issue with {ens_files[0]}. In the past it was a ValueError where lengths didn't match up for area ratio.")
-                storm_ds.close()
-                ds_env.close()
-                ds_svr.close()
-                del storm_ds, ds_env, ds_svr
-                return None 
+            #except:
+            #    print(f"""Issue with {ens_files[0]}. 
+            #          In the past it was a ValueError where lengths didn't match up for area ratio.""")
+            #    storm_ds.close()
+            #    ds_env.close()
+            #    ds_svr.close()
+            #    del storm_ds, ds_env, ds_svr
+            #    gc.collect()
+            #    return None 
 
             # Close the netcdf files
             storm_ds.close()
@@ -381,22 +413,9 @@ class MLDataGenerator:
             dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
             
             if self.predict:
-                # Add the forecast time index
-                
-                hr_size = 12 
-                hr_rng = np.arange(13)
-                ranges = [hr_rng, hr_rng+hr_size, hr_rng+(2*hr_size), hr_rng+(3*hr_size)]
-                
-                # Check the time index to determine whether it is valid for 0-1 or 1-2 hr. 
+                # Check the time index to determine the right model. 
                 time_index = int(env_file.split('_')[-4])
-                if time_index in ranges[0]:
-                    time = 'first_hour'
-                elif time_index in ranges[1]:
-                    time = 'second_hour'
-                elif time_index in ranges[2]:
-                    time = 'third_hour'
-                else:
-                    time = 'fourth_hour'
+                time = get_time_str(time_index)
                 
                 mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config)
                 generated_files.append(mlprob)
@@ -438,7 +457,7 @@ class MLDataGenerator:
                     
                 df_subset.to_json(subset_fname)
         
-            return [ save_df_file, subset_fname ] + generated_files
+            return [save_df_file, subset_fname] + generated_files
 
         else:
             if self.predict:
@@ -451,8 +470,11 @@ class MLDataGenerator:
                                                           np.zeros((storm_objects.shape), dtype=np.int32))
                 generated_files.append(self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file))
                 ds_env.close()
+                gc.collect()
                 del ds_env
-                
+        
+        gc.collect()
+        
         return generated_files
     
 

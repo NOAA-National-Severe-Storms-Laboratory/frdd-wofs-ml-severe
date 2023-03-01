@@ -11,6 +11,7 @@ from skimage.measure import regionprops
 import traceback
 from os.path import basename, dirname
 from datetime import timedelta 
+import gc 
 
 def get_init_time(filename):
     
@@ -32,8 +33,9 @@ def get_valid_time(filename, offset=6, dt=5):
 
 class MatchReportsToTracks:
     """Produces the MLTARGETS dataframe."""
-    def __init__(self, min_dists=[0,2,5]):
+    def __init__(self, min_dists=[0,2,5,10], err_window=15):
         self._min_dists = min_dists
+        self.err_window = err_window
 
     def get_reports(self, ncfile, 
                 reports_path='/work/mflora/LSRS/STORM_EVENTS_2017-2022.csv', 
@@ -47,7 +49,7 @@ class MatchReportsToTracks:
             report_type,
             init_time, 
             forecast_length=30,
-            err_window=5, 
+            err_window=self.err_window, 
             )
  
         report_lsrs = StormReportLoader(
@@ -55,7 +57,7 @@ class MatchReportsToTracks:
             'IOWA',
             init_time, 
             forecast_length=30,
-            err_window=5, 
+            err_window=self.err_window, 
             )
         try: 
             ds = xr.load_dataset(ncfile)
@@ -135,14 +137,17 @@ class MatchReportsToTracks:
                                                                      else 0 for label in labels]
                 
             # Original target column 
-            targets_data[f'{var}_original'] = [match_dict[label] for label in labels]
+            try:
+                targets_data[f'{var}_original'] = [match_dict[label] for label in labels]
+            except KeyError:
+                print('I got this error before: KeyError: -127')
+                return None 
             
         df = pd.DataFrame(targets_data)
         target_file = track_file.replace('ENSEMBLETRACKS', 'MLTARGETS').replace('.nc', '.feather')
             
-        #self.logger('debug', f'Saving {target_file}...')
-        ####target_file = os.path.basename(target_file)
-            
         df.to_feather(target_file)
 
+        gc.collect()
+        
         return target_file

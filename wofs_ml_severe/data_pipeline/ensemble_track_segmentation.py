@@ -14,12 +14,15 @@ import numpy as np
 from scipy.ndimage import maximum_filter, gaussian_filter
 
 # WoFS modules 
-_base_module_path = '/home/monte.flora/python_packages/WoF_post'
+_base_wofs_path = '/home/monte.flora/python_packages/WoF_post'
+_base_mp_path = '/home/monte.flora/python_packages/MontePython'
 import sys
-sys.path.insert(0,_base_module_path)
+sys.path.insert(0,_base_mp_path)
+sys.path.insert(0,_base_wofs_path)
 
-import monte_python
-from wofs.post.wofs_cbook import identify_deterministic_tracks
+from monte_python.object_identification import label_per_member
+import monte_python 
+
 from wofs.post.utils import save_dataset, load_yaml
 from wofs.common.zarr import open_dataset, normalize_filename
 from wofs.common import remove_reserved_keys
@@ -136,7 +139,6 @@ def version_control_procedure(file_path, data_vars, new_ds):
             # Finally, set the original variable name to the data from the
             # new dataset. 
             vals = new_ds[v].values
-            print(v, vals.shape, np.ndim(vals))
             if np.ndim(vals) == 3:
                 ds[v] = (['NE', 'NY', 'NX'], vals)
             else:
@@ -180,7 +182,7 @@ def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True,
     data_to_label = ds[VAR].values
     
     # Identify the deterministic 30-min updraft tracks. 
-    deterministic_tracks = identify_deterministic_tracks(
+    deterministic_tracks = label_per_member(
                             data_to_label=data_to_label, 
                             method=config['deterministic'][f'params'][0], 
                             params=config['deterministic'][f'params'][1], 

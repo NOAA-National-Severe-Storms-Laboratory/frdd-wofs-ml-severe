@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, _base_module_path)
 from wofs.post.utils import convert_to_seconds
 
+
 class StormBasedFeatureExtracter():
     """
     StormBasedFeatureExtracter is designed to extract storm and environmental data 
@@ -83,7 +84,7 @@ class StormBasedFeatureExtracter():
         object_props_df = self.get_object_properties(storm_objects, intensity_img)
         labels = object_props_df['label']
         if updraft_tracks is not None:
-            object_props_df['area_ratio'] = self.area_ratio(storm_objects, updraft_tracks)
+            object_props_df['area_ratio'] = self.area_ratio(storm_objects, updraft_tracks, labels)
             
         # Get the time-composite intra-storm data 
         storm_data_time_composite = self.__compute_time_composite(storm_data)
@@ -207,7 +208,7 @@ class StormBasedFeatureExtracter():
         
         NMEP_SIZES = self.ml_config['NMEP_SIZES']
         
-        uh_probs = {f'uh_nmep_>{t}_{n*self.dx}km': self.calc_ensemble_probs(data['uh_2to5__time_max'], 
+        uh_probs = {f'uh_nmep_>{t}_{n*self.dx}km': self.calc_ensemble_probs(data['uh_2to5_instant__time_max'], 
                                                                             thresh=t, size=n)
                     for t,n in itertools.product(UH_THRESHS, NMEP_SIZES)} 
         
@@ -515,7 +516,7 @@ class StormBasedFeatureExtracter():
         
         return df
 
-    def area_ratio(self, ensemble_tracks, updraft_tracks):
+    def area_ratio(self, ensemble_tracks, updraft_tracks, labels):
         """
         Computes the ratio of the ensemble avg. area of the individual storm tracks
         to the area of the ensemble storm track. 
@@ -529,22 +530,18 @@ class StormBasedFeatureExtracter():
         ---------------
         ratios : array-like shape (n_labels)
         """
-        # Get the list of ensemble storm track labels
-        labels = np.unique(ensemble_tracks)[1:]
         # Initialize the ratios array 
         ratios = np.zeros(len(labels), dtype=np.float32)
-        
         
         # Iterate on the labels 
         for i,label in enumerate(labels):
             points = np.where(ensemble_tracks==label)
-            ensemble_area = np.count_nonzero(ensemble_tracks[ensemble_tracks==label])
+            ensemble_area = np.count_nonzero(np.where(ensemble_tracks==label,1,0))
 
             # Should this ensemble avg area or conditional avg? 
             avg_area = np.mean([np.count_nonzero(updraft_tracks[n,:,:][points])
                         for n in range(updraft_tracks.shape[0])])
 
-            
             ratios[i] = avg_area / ensemble_area
 
         return ratios

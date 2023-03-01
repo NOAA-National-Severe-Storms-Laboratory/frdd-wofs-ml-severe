@@ -75,7 +75,8 @@ class MLDataPipeline(Emailer):
     # Then add the ensemble storm track parameters to a config file. 
     
     def __init__(self, dates=None, times = None, previous_method=False,
-                 n_jobs=30, out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
+                 n_jobs=30, 
+                 out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
         
         self._BASE_PATH = '/work/mflora/SummaryFiles'
         self.out_path = out_path 
@@ -99,10 +100,13 @@ class MLDataPipeline(Emailer):
         self._DURATION = 30
         self._previous_method = previous_method
         
-    def __call__(self, skip=[], delete_types=['MLDATA', 'ENSEMBLETRACKS', 'MLTARGETS', 'FINAL']):
+    def __call__(self, skip=[], delete_types=['MLDATA', 'ENSEMBLETRACKS', 'MLTARGETS', 'FINAL'], 
+                keep_existing_ml_files=False):
         """ Initiates the date building."""
         print(f'Deleting existing files {delete_types}...')
         self.delete_existing_files(delete_types)
+        
+        self.keep_existing_ml_files = keep_existing_ml_files
         
         if 'FINAL' in delete_types:
             os.system('rm /work/mflora/ML_DATA/DATA/wofs*')
@@ -232,8 +236,11 @@ class MLDataPipeline(Emailer):
         
         # TEMP.
         ml_files.remove('/work/mflora/SummaryFiles/20170502/0100/wofs_MLDATA_24_20170503_0230_0300.feather')
+        ml_files.remove('/work/mflora/SummaryFiles/20180630/1800/wofs_MLDATA_45_20180630_2115_2145.feather')
         
-        target_files = [f.replace('MLDATA', 'MLTARGETS') for f in ml_files] 
+        target_files = [f.replace('MLDATA', 'MLTARGETS') for f in ml_files if exists(f.replace('MLDATA', 'MLTARGETS')) ]
+        
+        print(f'{len(target_files)=} {len(ml_files)=}')
         
         dfs = [pd.read_feather(f) for f in ml_files]
         
@@ -337,7 +344,12 @@ class MLDataPipeline(Emailer):
                      'svr_file'   : svr_file, 
                      'ens_file'   : ens_files,
                 }
-                paths.append(files)
+                if self.keep_existing_ml_files:
+                    if not exists(track_file.replace('ENSEMBLETRACKS', 'MLDATA').replace('.nc', '.feather')):
+                        paths.append(files)
+                else:
+                    paths.append(files)
+                    
             except:
                 print(f'Issue with {track_file} for ml files')
         
