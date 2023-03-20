@@ -31,10 +31,26 @@ stages:
         - bash: echo "##vso[task.prependpath]$CONDA/bin"
           displayName: Add conda to PATH
       
-        - script: conda env update --name base --file $(env_file)
-          displayName: Create Anaconda environment
-      
+        # Install mamba to manage dependencies faster
         - bash: |
+            conda config --set allow_conda_downgrades true
+            conda install conda=4.12.0 -y
+            conda install --yes mamba -c conda-forge
+          displayName: Install Mamba package manager
+     
+        - task: PipAuthenticate@1
+          displayName: 'Pip Authenticate'
+          inputs:
+            artifactFeeds: 'Warn-on-Forecast/wofs-post'
+            
+        - bash: |
+            # workaround based on recent failures
+            rm /usr/share/miniconda/pkgs/cache/*.json    
+            mamba env create --file $(env_file)
+          displayName: Create mamba environment            
+     
+        - bash: |
+            source activate monte_python
             python setup.py bdist_wheel
           displayName: Build wheel
 
