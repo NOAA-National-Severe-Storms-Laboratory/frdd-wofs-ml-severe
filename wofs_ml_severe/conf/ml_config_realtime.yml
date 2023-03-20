@@ -21,18 +21,18 @@ RENAME_TARGETS :
     matched_to_tornado_0km     : 'Tornado' 
     matched_to_severe_wind_0km : 'Severe Wind'
                     
-MODEL_NAMES : ['RandomForest', 
+MODEL_NAMES : [
                'LogisticRegression', 
-               'Baseline'
-              ]
-TARGETS : ['tornado_severe_0km', 
-           'hail_severe_0km', 
+]
+                 
+TARGETS : [
            'wind_severe_0km',
+           'hail_severe_0km',
           ] 
 
-ENS_VARS  : [ 'uh_0to2',
-              'uh_2to5',
-              'wz_0to2',
+ENS_VARS  : [ 'uh_0to2_instant',
+              'uh_2to5_instant',
+              'wz_0to2_instant',
               'comp_dz',
               'ws_80',
               'w_up',
@@ -109,9 +109,9 @@ MORPHOLOGICAL_FEATURES : [
                           ]
                           
 FEATURE_SUBSET_DICT :  
-                   'wz_0to2__time_max__amp_ens_mean' : 'vert_vort' 
+                   'wz_0to2_instant__time_max__amp_ens_mean' : 'vert_vort' 
                    'hailcast__time_max__amp_ens_mean' : 'hail_size'
-                   'uh_2to5__time_max__amp_ens_mean' : 'uh'  
+                   'uh_2to5_instant__time_max__amp_ens_mean' : 'uh'  
                    'comp_dz__time_max__amp_ens_mean' : 'comp_refl'
                    'cape_ml__ens_mean__spatial_mean' : 'cape' 
                    

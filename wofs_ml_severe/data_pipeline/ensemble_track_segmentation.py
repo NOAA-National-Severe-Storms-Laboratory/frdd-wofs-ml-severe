@@ -83,6 +83,7 @@ def identify_ensemble_tracks(deterministic_tracks,
                        return_object_properties=True, 
                        params = params,  
                        )
+    
     """
     # Add QC 
     qcer = monte_python.QualityControler()
@@ -241,104 +242,3 @@ def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True,
         version_control_procedure(save_filename, dataset.data_vars, dataset)
     
     return save_filename
-
-
-'''
-Deprecated. 
-
-def generate_ensemble_track_dir(indir, dt, n_processors, nt, duration, runtype):
-    """
-    This script will generate the ensemble storm tracks for updraft, and mid- and low-level UH.
-
-    Parser Arguments: 
-    ------------------------
-        -i, --indir : str
-            file path to the series of ENS summary files 
-            to be processed
-        -d, --dt : int
-            the forecast interval between ENS summary files
-            (this variable should be declared in a config.yaml
-            in the Wof_post/conf)
-        -n, --n_processors : int or float
-            Number of processors to use or
-            percentage of the processors to use
-        --nt : int
-            Number of time steps to process
-        --duration : int
-            Duration of the track (in minutes)
-        --runtype : 'rto' or 'rlt'
-            Whether the script is being ran in research mode ('rto')
-            or in realtime ('rlt'). If 'rlt', the scripts are delayed
-            to allow for WRFOUT files to be generated before
-            processing the summary files.
-    """
-
-    delta_time_step = int(duration / dt)
-    total_idx = (nt + delta_time_step) + 1
-    rtype = runtype
-
-    summary_file_dir = indir
-    summary_ens_files = generate_summary_file_name(
-        indir=indir,
-        outdir=indir,
-        time_idxs=range(total_idx),
-        mode="ENS",
-        output_timestep=dt,
-        first_hour=14,
-    )
-
-    if duration == 30:
-        if nt == 72 or nt == 36:
-            nt = (nt - delta_time_step) + 1
-        else:
-            nt = nt + 1
-        iterator = range(nt)
-    elif duration == 60:
-        iterator = range(0, nt, delta_time_step)
-
-    iterator_size = len(list(iterator))
-
-    files = []
-    for i in iterator:
-        nc_file_paths = [
-            join(summary_file_dir, f)
-            for f in summary_ens_files[i : i + delta_time_step + 1]
-        ]
-        files.append(nc_file_paths)
-
-
-    files_to_load =[]
-    for nc_file_paths in files:
-        fname = generate_track_filename(
-            nc_file_paths[0], nc_file_paths[-1], duration=duration, nt=nt
-        )
-        files_to_load.append(join(summary_file_dir, fname))
-
-    generate_ensemble_track_files(files_to_load, n_processors, rtype)
-
-
-def generate_ensemble_track_files(files, nprocs, rtype):
-    """
-    files array should be a list of summary files to load in parallel
-    """
-    run_parallel_realtime(
-        func=generate_ensemble_track_file,
-        nprocs_to_use=nprocs,
-        iterator=to_iterator(files),
-        rtype=rtype
-    )
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--indir", type=str)
-    parser.add_argument("-d", "--dt", type=int)
-    parser.add_argument("-n", "--n_processors", type=float)
-    parser.add_argument("--nt", type=int)
-    parser.add_argument("--duration", type=int)
-    parser.add_argument("--runtype", type=str)
-
-    args = parser.parse_args()
-
-    generate_ensemble_track_dir(args.indir, args.dt, args.n_processors, args.nt, args.duration, args.runtype)
-'''

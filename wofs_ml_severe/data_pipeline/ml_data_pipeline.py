@@ -124,6 +124,9 @@ class MLDataPipeline(Emailer):
             print('info', '======== EXTRACTING THE ML FEATURE USING THE TRACKS =====') 
             self.get_ml_features()
         
+        if 'append_ml_features' not in skip:
+            self.append_ml_features()
+        
         # Match to the storm reports.
         if  'match_to_storm_reports' not in skip:
             print('info', '============ MATCHING TRACKS TO STORM REPORTS ===========')
@@ -198,7 +201,33 @@ class MLDataPipeline(Emailer):
                 
         if self.send_email_bool:
             self.send_email("ML feature extraction is finished!", start_time)  
+    
+    def append_ml_features(self,):
+        """ Extract ML features from the WoFS using the 
+        ensemble storm tracks. Appending onto existing dataframes.
+        This will change in the future. 
+        """
+        paths = self.get_files("MLDATA")
         
+        paths = [{'track_file' : f.replace('MLDATA', 'ENSEMBLETRACKS').replace('.feather', '.nc')}
+                  for f in paths]
+        
+        start_time = self.get_start_time()
+
+        if len(paths) > 0:
+            # MAIN FUNCTION
+            try:
+                mlops = MLDataGenerator(TEMP=False, retro=True, logger=print) 
+                
+                mlops(paths, 
+                      n_processors=self.n_jobs, 
+                      realtime=False, append=True)
+            except:
+                print(traceback.format_exc())
+                
+        if self.send_email_bool:
+            self.send_email("Appending ML feature extraction is finished!", start_time)  
+    
     def match_to_storm_reports(self,):
         """ Match ensemble storm tracks to storm reports 
         

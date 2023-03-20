@@ -15,6 +15,7 @@ class IO:
     
     def __init__(self, basePath = '/work/mflora/ML_DATA/DATA'):
         self.basePath = basePath 
+        ###self.outdir = '/work/mflora/ML_DATA/MLDATA'
     
     def _train_test_split(self):
         """
@@ -75,22 +76,26 @@ class IO:
         
 # Convert New to Old 
 def resample_to_old_dataset(df, original_dates):
-    df_copy = df.copy()
-    new_dates = df['Run Date'].apply(str)
+    dates = df['Run Date'].apply(str)
+    return df.loc[dates.isin(original_dates)]
+
+def get_numeric_init_time(X): 
+    Xt = X.copy()
+    Xt['timestamp'] = pd.to_datetime(Xt['Initialization Time'].values, format='%H%M')
+    minutes_since_midnight = lambda x: x.hour 
+    Xt['Initialization Time'] = Xt['timestamp'].apply(minutes_since_midnight)
     
-    # Get the indices of dates within the old dates 
-    cond = new_dates.isin(np.unique(original_dates))
-    inds = np.where(cond==True)[0]
-    df_copy_sub = df_copy.iloc[inds]
-    df_copy_sub.reset_index(drop=True, inplace=True)
+    Xt.drop(['timestamp'], axis=1, inplace=True)
     
-    return df_copy_sub
+    return Xt 
 
 def load_ml_data(target_col, 
                  lead_time = 'first_hour', 
                  mode = None, 
                  baseline=False,
-                 return_df=False, 
+                 return_only_df=False, 
+                 load_reduced=True, 
+                 base_path = '/work/mflora/ML_DATA/DATA',
                 ): 
     """ Loads the ML dataset. 
     
@@ -127,39 +132,69 @@ def load_ml_data(target_col,
     #base_path = '/work/mflora/ML_DATA/MLDATA'
     #file_path = join(base_path, f'wofs_ml_severe__{lead_time}__{mode}_data.feather')
     
-    base_path = '/work/mflora/ML_DATA/DATA'
     if baseline:
-        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__baseline_data.feather')
+        if load_reduced:
+            file_path = join(base_path, f'wofs_ml_severe__{lead_time}__baseline_reduced_data.feather')
+        else:
+            file_path = join(base_path, f'wofs_ml_severe__{lead_time}__baseline_data.feather')
     else:
-        file_path = join(base_path, f'wofs_ml_severe__{lead_time}__data.feather')
+        if load_reduced:
+            file_path = join(base_path, f'wofs_ml_severe__{lead_time}__reduced_data.feather')
+        else:
+            file_path = join(base_path, f'wofs_ml_severe__{lead_time}__data.feather')
     
     df = pd.read_feather(file_path)
  
     if mode is None:
         print('Only keeping warm season cases for the official training!') 
-        df = df[pd.to_datetime(df['Run Date']).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
+        df = df.loc[pd.to_datetime(
+            df['Run Date'].apply(str)).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
     else:
         if isinstance(target_col, list):
-            raise ValueError('At this time, cannot load all severe or all sig severe for the retrospective stuff')
+            target_col = target_col[0]
+            #raise ValueError('At this time, cannot load all severe or all sig severe for the retrospective stuff')
         
-        target = target_col.split('_severe_')[0]
+        if 'sig' in target_col:
+            target = target_col.split('_sig_severe_')[0]
+        else:
+            target = target_col.split('_severe_')[0]
+      
         target = f'severe_{target}' if target != 'tornado' else target
         
         if lead_time in ['third_hour', 'fourth_hour']:
             lead_time = 'second_hour'
         
-        dates = pd.read_feather(f'/work/mflora/ML_DATA/DATA/original_dates/{mode}_{lead_time}_{target}_dates.feather')
-        original_dates = dates['Dates'].values 
+        dates = pd.read_feather(join('/work/mflora/ML_DATA/DATA', 
+                                     'original_dates', f'{mode}_{lead_time}_{target}_dates.feather'))
+        original_dates = dates['Dates'].apply(str) 
     
         df = resample_to_old_dataset(df, original_dates)
 
+    # These are the init times to keep. It ignores init times from 1700-1900 (not inclusive). 
+    # These are the standard init times used during the spring cases. 
+    init_times = ['0000', '0030', '0100', '0130', '0200', '0230', '0300', '1900', '1930', '2000', '2030', '2100',
+       '2130', '2200', '2230', '2300', '2330']
+
+    df = df.loc[df['Initialization Time'].isin(init_times)]
+    df.reset_index(inplace=True, drop=True) 
     
-    metadata = df[['Run Date', 'forecast_time_index', 'Initialization Time', 'label', 'obj_centroid_y', 'obj_centroid_x']]
+    # Convert the str init times to hours after midnight. 
+    df = get_numeric_init_time(df)
+    
+    # For the conditional features, replace the NaNs with zero
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.reset_index(inplace=True, drop=True) 
+    
+    metadata_features = ['Run Date', 'forecast_time_index', 
+                         'Initialization Time', 'label', 'obj_centroid_y', 'obj_centroid_x']
+    metadata = df[metadata_features]
     
     features = [f for f in df.columns if 'severe' not in f]
-
-    X = df[features]
+    features = [f for f in features if f not in metadata_features] 
+    features.append('Initialization Time')
     
+    X = df[features]
+         
     if isinstance(target_col, list):
         # Convert to all-severe.
         y = df[target_col].values
@@ -167,8 +202,8 @@ def load_ml_data(target_col,
     else:
         y = df[target_col]
 
-    if return_df:
-        return X, y, metadata, df
+    if return_only_df:
+        return df
     else:
         return X,y, metadata     
         

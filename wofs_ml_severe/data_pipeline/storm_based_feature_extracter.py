@@ -38,10 +38,9 @@ class StormBasedFeatureExtracter():
             2. Basline thresholds and NMEP sizes 
             3. morphological variables to extract from the skimage.measure.regionprops object 
     """
-    def __init__(self, ml_config, cond_var='w_up__time_max', cond_var_thresh=12.0, dx = 3, TEMP=True):
+    def __init__(self, ml_config, cond_var='w_up__time_max', cond_var_thresh=12.0, dx = 3):
         self.ml_config = ml_config
         self.dx = dx 
-        self.TEMP = TEMP
         self.cond_var = cond_var
         self.cond_var_thresh = 12.0 
         
@@ -84,7 +83,9 @@ class StormBasedFeatureExtracter():
         object_props_df = self.get_object_properties(storm_objects, intensity_img)
         labels = object_props_df['label']
         if updraft_tracks is not None:
-            object_props_df['area_ratio'] = self.area_ratio(storm_objects, updraft_tracks, labels)
+            results = self.area_ratio(storm_objects, updraft_tracks, labels)
+            object_props_df['area_ratio'] = results[0]
+            object_props_df['avg_updraft_track_area'] = results[1]
             
         # Get the time-composite intra-storm data 
         storm_data_time_composite = self.__compute_time_composite(storm_data)
@@ -124,12 +125,8 @@ class StormBasedFeatureExtracter():
         # Concatenate everything into a single dataframe.
         dataframe = pd.concat([df_spatial, df_amp, object_props_df, df_nmep], axis=1)
 
-        if self.TEMP:
-            init_time = [convert_to_seconds(init_time)]*np.shape(dataframe)[0]
-        else:
-            init_time = [str(init_time)]*np.shape(dataframe)[0]
-       
-        dataframe['Initialization Time'] = init_time
+        # Retuns the initialization time as string of format (HHmm)
+        dataframe['Initialization Time'] = [str(init_time)]*np.shape(dataframe)[0]
  
         # Reset the indices for feathering.
         dataframe.reset_index(drop=True, inplace=True)
@@ -516,6 +513,13 @@ class StormBasedFeatureExtracter():
         
         return df
 
+    
+    def average_updraft_track_area(self, updraft_tracks, points):
+        """Computes the average area of the updraft tracks from the individual 
+        ensemble members"""
+        return np.mean([np.count_nonzero(updraft_tracks[n,:,:][points])
+                        for n in range(updraft_tracks.shape[0])])
+    
     def area_ratio(self, ensemble_tracks, updraft_tracks, labels):
         """
         Computes the ratio of the ensemble avg. area of the individual storm tracks
@@ -532,6 +536,7 @@ class StormBasedFeatureExtracter():
         """
         # Initialize the ratios array 
         ratios = np.zeros(len(labels), dtype=np.float32)
+        areas = np.zeros(len(labels), dtype=np.float32)
         
         # Iterate on the labels 
         for i,label in enumerate(labels):
@@ -539,9 +544,9 @@ class StormBasedFeatureExtracter():
             ensemble_area = np.count_nonzero(np.where(ensemble_tracks==label,1,0))
 
             # Should this ensemble avg area or conditional avg? 
-            avg_area = np.mean([np.count_nonzero(updraft_tracks[n,:,:][points])
-                        for n in range(updraft_tracks.shape[0])])
+            avg_area = self.average_updraft_track_area(updraft_tracks, points)
 
             ratios[i] = avg_area / ensemble_area
+            areas[i] = avg_area
 
-        return ratios
+        return ratios, areas

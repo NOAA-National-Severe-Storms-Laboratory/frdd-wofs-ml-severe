@@ -15,6 +15,9 @@ import gc
 # Only model pickle files
 import os, sys
 sys.path.append(os.getcwd())
+from skimage.measure import regionprops
+import json 
+import math
 
 # Third part modules
 import numpy as np
@@ -23,8 +26,11 @@ import pandas as pd
 
 # WoFS modules 
 _base_module_path = '/home/monte.flora/python_packages/WoF_post'
+_base_mp_path = '/home/monte.flora/python_packages/MontePython'
 import sys
 sys.path.insert(0, _base_module_path)
+sys.path.insert(0,_base_mp_path)
+import monte_python 
 
 from ..common.multiprocessing_utils import run_parallel, to_iterator
 from ..common.util import decompose_file_path
@@ -40,6 +46,7 @@ from wofs.post.utils import (
 
 # Personal Modules 
 from ..io.load_ml_models import load_ml_model, load_calibration_model
+from ..io.io import get_numeric_init_time
 from .storm_based_feature_extracter import StormBasedFeatureExtracter
 # Temporary until the ML models are re-trained 
 # with the new naming convention!!!
@@ -48,6 +55,9 @@ from .name_mapper import name_mapping
 def is_list(a):
     return isinstance(a, list)
 
+
+# Temporarily Deprecated until new models are generated
+"""
 def get_time_str(time_index): 
     hr_size = 12 
     blend_period = 5
@@ -76,6 +86,75 @@ def get_time_str(time_index):
         time = 'fourth_hour'
         
     return time
+"""
+def get_time_str(ts):
+    # 12 is for the 12 timesteps in the first hour (dt=5min)
+    first_hour = 12
+    # blending the first and second hour output for 5 timesteps 
+    blend_period = 4
+    if ts <= first_hour:
+        time = 'first_hour'
+    elif first_hour < ts <= first_hour+blend_period:
+        time = ['first_hour', 'second_hour']
+    else:
+        time = 'second_hour'
+        
+    return time 
+
+def just_transforms(model, X):
+    """Applies all transforms to the data, without applying last 
+       estimator.
+
+    Parameters
+    ----------
+    X : iterable
+        Data to predict on. Must fulfill input requirements of first step of
+        the pipeline.
+    """
+    X['Initialization Time'] = X['Initialization Time'].astype(str)
+    X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    X.reset_index(inplace=True, drop=True)
+    
+    Xt = X
+    for name, transform in model.steps[:-1]:
+        Xt = transform.transform(Xt)
+    return Xt
+
+
+def lr_inputs(model, X):
+    """Compute the product of the model coefficients and processed inputs (e.g., scaling)."""
+    # Scale the inputs. 
+    try:
+        base_est = model.estimators[0].calibrated_classifiers_[0].base_estimator
+    except:
+        base_est = model.calibrated_classifiers_[0].base_estimator
+    
+    Xt = just_transforms(base_est, X)
+    # Get the model coefficients. 
+    coef = base_est.named_steps['model'].coef_[0,:]
+    
+    inputs = coef*Xt
+    
+    return inputs
+
+def fix_data(X): 
+    X = X.astype({'Initialization Time' : str})
+    X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    X.reset_index(inplace=True, drop=True)
+    
+    return X 
+
+
+def get_target_str(target):
+    if 'all' in target:
+        return target 
+    else:
+        comps = target.split('_')
+        hazard = comps[0]
+        if 'sig' in target:
+            return f'{hazard}_sig'
+        
+    return hazard
 
 
 class MLDataGenerator: 
@@ -86,11 +165,15 @@ class MLDataGenerator:
     Attributes
     -------------------
     TEMP : True/False
-       If True, the previous ML configuration and naming convention from the 2021 paper is used!
+       If True, then current parts of the data pre-processing procedure are modified 
+       to ensure the data is correct with the current renditions of the ML models.
        
-    retro : True/False (default=False) 
-        If True, data is pulled from /work rather than /scratch
-     
+       Current TEMPS: 
+       
+       * Converting the mid-level temps from deg C to deg F. In the 2023-current summary files, 
+       the mid-level temps are in deg C. The existing local summary files, however, were 
+       generated with deg F. 
+       
     keyword args
        - paths : dict 
            dict with keys = ['track_file', 'env_file', 'ens_file', 'svr_file']
@@ -101,10 +184,11 @@ class MLDataGenerator:
            Path to the yaml configuration file for the ML.  
     """
     ### Monte: Removed old inputs 08/24/2022.
-    def __init__(self, TEMP=True, retro=False, debug=False, outdir=None, **kwargs):
+    ### Removed retro 18 March 2023 
+    def __init__(self, TEMP=True, debug=False, outdir=None, **kwargs):
         
         self.TEMP = TEMP
-        self.retro=retro
+        
         self.debug = debug
         self._outdir = outdir
         
@@ -114,7 +198,9 @@ class MLDataGenerator:
                  paths, 
                  n_processors=1, 
                  realtime=True, 
-                outdir=None):
+                outdir=None, 
+                append=False):
+        
         """Runs the data generator
         
         Parameters
@@ -148,16 +234,19 @@ class MLDataGenerator:
         self.explain  = explain
         self.realtime = realtime
         
+        func = self._append if append else self.generate_ml_severe_files
+        
+        
         if isinstance(paths, list):
             run_parallel(
-            func=self.generate_ml_severe_files,
+            func=func,
             nprocs_to_use=n_processors,
             args_iterator=to_iterator(paths),
             description='Generating ML Data'
             )
         else:
             ### Josh: if we are only loading one set of files, we don't need the Pool spinup 
-            return self.generate_ml_severe_files(paths)
+            return func(paths)
     
     def to_2d(self, predictions, forecast_objects, object_labels, shape_2d):
         """Convert column vector predictions to 2D"""
@@ -195,13 +284,20 @@ class MLDataGenerator:
     def is_there_an_object(self, storm_objects):   
         return np.max(storm_objects) > 0
 
-    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config):
+    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config, ens_probs):
         """
         Produces 2D probabilistic predictions from the ML model and baseline system
         """
         prediction_data = {}
         object_labels = dataframe['label']
         times = [time] if not is_list(time) else time
+        
+        # Create the trimmed objects.
+        tag='trimmed'
+        qc_params = [('trim', (9/18, 4/18) )]
+        object_props = regionprops(storm_objects, ens_probs) 
+        qcer = monte_python.QualityControler()
+        storm_objects_trimmed, _ = qcer.quality_control(ens_probs, storm_objects, object_props, qc_params)
         
         for pair in itertools.product(ml_config['MODEL_NAMES'], ml_config['TARGETS']):
             model_name, target = pair
@@ -217,15 +313,24 @@ class MLDataGenerator:
                     parameters['time'] = time
                     model_dict = load_ml_model(**parameters)
                     model = model_dict['model']
-                    features = list(model_dict['X'].columns)
+                    try: 
+                        features = model_dict['features']
+                    except:
+                        features = list(model_dict['X'].columns)
             
-                    if self.TEMP:
-                        corrected_feature_names = name_mapping(features)
-                        new_features = [corrected_feature_names.get(f,f) for f in features]
-                        X = dataframe[new_features]
-                    else:
-                        X = dataframe[features]
-                
+                    # Deprecated 17 March 2023. New models no longer need the feature name correction. 
+                    #if self.TEMP:
+                    #    corrected_feature_names = name_mapping(features)
+                    #    new_features = [corrected_feature_names.get(f,f) for f in features]
+                    #    X = dataframe[new_features]
+                    #else:
+                        
+                    X = dataframe[features] 
+                    X = fix_data(X)
+                    
+                    # Get the numeric init time 
+                    X = get_numeric_init_time(X)
+                    
                     # Compute the probabilities.
                     predictions.append(model.predict_proba(X)[:,1])
             else:
@@ -240,21 +345,84 @@ class MLDataGenerator:
             # Average together predictions during the transition period.     
             predictions = np.mean(predictions, axis=0) 
             
-            predictions_2d = self.to_2d(predictions, storm_objects, object_labels, shape_2d=storm_objects.shape)
-            prediction_data[f'{model_name}__{target}'] = (['NY', 'NX'], predictions_2d)
-    
+            model_name_str = 'ML' if model_name == 'Average' else model_name
+            target_str = get_target_str(target)
+            
+            # Create the full and trimmed tracks and save them to the dataset. 
+            for name, objs in zip(['full', 'trimmed'], [storm_objects,storm_objects_trimmed]):
+                predictions_2d = self.to_2d(predictions, objs, object_labels, shape_2d=storm_objects.shape)
+                prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'], predictions_2d)
+            
+            # Generate the local explainability JSON. 
+            if model_name in ['Average', 'LogisticRegression']:
+                self.generate_explainability_json(model, X, target, dataframe, features, 
+                                     ensemble_track_file, 
+                                )    
+            
         return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file)
 
+    def get_top_features(self, inputs, X, features, ind):
+        """Using the LR coefficients, determine the top 5 predictors and their values."""
+        # Get the absolute values. The onehotencoding on the initialization time
+        # adds additional features. To bypass that issue, I've just made it so that 
+        # we are only including non init time features. 
+        abs_inputs = np.absolute(inputs[:])
+        # Sort the values and get the highest values. 
+        sorted_indices = np.argsort(abs_inputs)[::-1]
+        
+        top_features = np.array(features)[sorted_indices][:5]
+
+        top_values = X[top_features].values[ind]
+
+        return top_features, top_values 
     
-    #def _correct_naming(self, data):
-    #    """ Remove the '_instant' for the intra-storm variables like UH"""
-    #    varnames = list(data.keys())
-    #    for v in varnames:
-    #        if 'instant' in v:
-    #            data[v.split('_instant')[0]] = data[v]
-    #            del data[v]
+    def generate_explainability_json(self, model, X, 
+                                     target, dataframe, features, 
+                                     ensemble_track_file, 
+                                ): 
+        """Generate the local explainability JSON file"""
+        # Save subset of data for the explainability graphics. 
+        subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 'LOCALEXPLAIN').replace('.nc', '.json') 
     
-    #   return data 
+        # Load the round_dict 
+        json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
+        
+        with open(json_file) as f:
+            results = json.load(f)
+    
+        round_dict = {f : results[f]['round_int'] for f in features}
+    
+        # Get the metadata like the object coords. 
+        # TODO: Add the ens_prob predictor to get the number of predictors. 
+        metadata = dataframe[['label', 'obj_centroid_x', 'obj_centroid_y', 'ens_track_prob']]
+        metadata ['ens_track_prob'] = (metadata ['ens_track_prob']*18).astype(int)
+        
+        inputs = lr_inputs(model, X)
+        
+        #if self.TEMP:
+        #    dataframe['low_level_lapse_rate__ens_mean__spatial_mean']/=-3.0
+        #    dataframe['mid_level_lapse_rate__ens_mean__spatial_mean']/=-2.67765
+        
+        # Round the data. 
+        dataframe = dataframe.round(round_dict)
+        
+        results = [self.get_top_features(inputs[i,:], dataframe, features, i) for i in range(inputs.shape[0])]
+    
+        top_features = [r[0] for r in results]
+        # The lists are nested. 
+        top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
+        top_values = np.array([r[1] for r in results])
+    
+        val_df = pd.DataFrame(top_values, columns=[f'Feature Val {i+1}' for i in range(5)])
+        feature_df = pd.DataFrame(top_features, columns=[f'Feature Name {i+1}' for i in range(5)])
+    
+        total_df = pd.concat([val_df, feature_df, metadata], axis=1)
+
+        print(f'Saving {subset_fname}...')
+        total_df.to_json(subset_fname)
+    
+        return subset_fname
+    
     
     def _load_config(self, path_to_summary_file):
         """Loads the YAML config file for the ML dataset"""
@@ -286,6 +454,51 @@ class MLDataGenerator:
     
         return run_date, init_time
     
+    
+    def _append(self, file_dict):
+        """
+        This function is used to append columns onto existing ML dataframes.
+        This is to prevent re-generating the full dataset when adding new 
+        predictors. Therefore, this function is flexible and may change in 
+        future. 
+        """
+        ensemble_track_file = file_dict['track_file']  
+        ml_config = self._load_config(ensemble_track_file) 
+        
+        # See if there are tracks
+        try:
+            ensemble_track_ds = open_dataset(ensemble_track_file, decode_times=False)
+        except OSError:
+            print(f'Unable to load {ensemble_track_file}')
+            return None
+            
+        storm_objects = ensemble_track_ds['w_up__ensemble_tracks'].values
+        intensity_img = ensemble_track_ds['w_up__ensemble_probabilities'].values
+        updraft_tracks = ensemble_track_ds['updraft_tracks'].values
+
+        extracter = StormBasedFeatureExtracter(ml_config, TEMP=self.TEMP)
+        
+        # See if there are tracks
+        if self.is_there_an_object(storm_objects):
+            object_props_df = extracter.get_object_properties(storm_objects, intensity_img)
+            labels = object_props_df['label']
+            results = extracter.area_ratio(storm_objects,
+                                        updraft_tracks=updraft_tracks,
+                                           labels=labels,
+                                     ) 
+            # Open existing dataframe
+            ml_data_path = ensemble_track_file.replace('ENSEMBLETRACKS', 'MLDATA').replace('.nc', '.feather')
+            ml_df = pd.read_feather(ml_data_path)
+            
+            ml_df['avg_updraft_track_area'] = results[1]
+        
+            # overwrite the existing file. 
+            ml_df.to_feather(ml_data_path)
+            ensemble_track_ds.close()
+            
+        return ml_data_path 
+        
+
     def generate_ml_severe_files(self, file_dict):
         """
         Generates the dataframe of input features, the file for the explainability graphic, 
@@ -327,15 +540,23 @@ class MLDataGenerator:
                 return None
                 
             if self.TEMP: 
+                # Deprecated on 17 March 2023 
                 # Convert lapse rate from C/KM back to C 
-                env_data['mid_level_lapse_rate'] = env_data['mid_level_lapse_rate']*2.67765
-                env_data['low_level_lapse_rate'] = env_data['low_level_lapse_rate']*3.0  
+                #env_data['mid_level_lapse_rate'] = env_data['mid_level_lapse_rate']*2.67765
+                #env_data['low_level_lapse_rate'] = env_data['low_level_lapse_rate']*3.0  
                 
-                # Convert from deg F to deg C 
-                temp_vars = ['temperature_850','temperature_700',
-                             'temperature_500','td_850','td_700','td_500']
+                # Convert from deg C to deg F 
+                temp_vars = ['temperature_850', 
+                             'temperature_700',
+                             'temperature_500', 
+                             'td_850',
+                             'td_700',
+                             'td_500', 
+                            ]
+                
                 for var in temp_vars:
-                    env_data[var] = (5./9.) * (env_data[var] - 32.)
+                    # C -> F 
+                    env_data[var] = (1.8 * env_data[var]) + 32.  
                 
             # Some environmental variables may be in the ENS files
             if len(ml_config['ENV_IN_ENS_VARS']) > 0:
@@ -371,17 +592,17 @@ class MLDataGenerator:
            
             storm_ds = xr.Dataset(multiple_datasets_dict)
             
-            if self.TEMP:
+            # Deprecated on 17 March 2023 
+            #if self.TEMP:
                 # CTT is in the ENS file. Converting to deg C. 
-                storm_ds['ctt'] = (5./9.) * (storm_ds['ctt'] - 32.)
+            #    storm_ds['ctt'] = (5./9.) * (storm_ds['ctt'] - 32.)
             
-            extracter = StormBasedFeatureExtracter(ml_config, TEMP=self.TEMP)
+            extracter = StormBasedFeatureExtracter(ml_config)
 
             env_data = {**env_data, **svr_data}
         
             run_date, init_time = self.decompose_path(env_file) 
             
-            #try:
             dataframe = extracter.extract(storm_objects,
                                       intensity_img,
                                       storm_ds, 
@@ -389,15 +610,6 @@ class MLDataGenerator:
                                        init_time=str(init_time),
                                         updraft_tracks=updraft_tracks,
                                      ) 
-            #except:
-            #    print(f"""Issue with {ens_files[0]}. 
-            #          In the past it was a ValueError where lengths didn't match up for area ratio.""")
-            #    storm_ds.close()
-            #    ds_env.close()
-            #    ds_svr.close()
-            #    del storm_ds, ds_env, ds_svr
-            #    gc.collect()
-            #    return None 
 
             # Close the netcdf files
             storm_ds.close()
@@ -417,7 +629,8 @@ class MLDataGenerator:
                 time_index = int(env_file.split('_')[-4])
                 time = get_time_str(time_index)
                 
-                mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config)
+                mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, 
+                                              ensemble_track_file, ml_config, intensity_img)
                 generated_files.append(mlprob)
             
             ensemble_track_ds.close()
@@ -442,10 +655,10 @@ class MLDataGenerator:
             
                 df_subset = df_subset.rename(columns = ml_config['FEATURE_SUBSET_DICT']) 
         
-                if self.TEMP:
+                #if self.TEMP:
                     # Convert the lapse rates back into lapse rates rather than temp diffs. 
-                    df_subset['0-3km_lapse_rate']/=-3.0
-                    df_subset['500-700mb_lapse_rate']/=-2.67765
+                #    df_subset['0-3km_lapse_rate']/=-3.0
+                #    df_subset['500-700mb_lapse_rate']/=-2.67765
             
                 # Round the values. 
                 df_subset = df_subset.round(ml_config['ROUNDING'])
