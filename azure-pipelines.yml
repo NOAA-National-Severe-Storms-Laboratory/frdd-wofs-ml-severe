@@ -1,5 +1,5 @@
 trigger:
-- master
+- main
 
 parameters:
 - name: package_version
@@ -8,21 +8,21 @@ parameters:
   default: 1.1
 
 variables:
-  PACKAGE_VERSION: ${{ parameters.package_version }}.$(Build.BuildId)
+- name: PACKAGE_VERSION
+  value: ${{ parameters.package_version }}.$(Build.BuildId)
+- name: vmImageName
+  value: 'ubuntu-22.04'
 
 stages:
 - stage: Build
   displayName: Build Package
   jobs:
       - job:
-        displayName: ubuntu-18.04
+        displayName: ${{ variables.vmImageName }}
         pool:
-          vmImage: 'ubuntu-18.04'
+          vmImage: $(vmImageName)
         strategy:
           matrix:
-            # Python36:
-            #   python.version: '3.6'
-            #   env_file: 'environment.yml'
             Python38:
               python.version: '3.8'              
               env_file: 'environment_py38.yml'
@@ -54,7 +54,7 @@ stages:
           displayName: 'Create GitHub Release'
           inputs:
             gitHubConnection: WarnOnForecast-Github
-            repositoryName: WarnOnForecast/MontePython
+            repositoryName: WarnOnForecast/wofs_ml_severe
             isPreRelease: false
             tagSource: userSpecifiedTag
             assets: dist/*.whl
