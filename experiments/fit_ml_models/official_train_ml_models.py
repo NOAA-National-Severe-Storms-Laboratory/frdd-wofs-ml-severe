@@ -165,7 +165,7 @@ target_cols = ['wind_severe_0km',
                ['wind_sig_severe_0km', 'hail_sig_severe_0km', 'tornado_sig_severe_0km'],
               ]
 
-model_names = ['LogisticRegression']#, 'RandomForest']
+model_names = ['XGBoost']#, 'RandomForest']
 resampling = [None]
 times = ['first_hour', 'second_hour']#, 'third_hour', 'fourth_hour']
 # If 'training', it will load the data with the original training dates from Flora et al. (2021, MWR)

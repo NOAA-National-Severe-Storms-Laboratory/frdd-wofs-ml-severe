@@ -370,7 +370,7 @@ map_to_units={
                     'w_up': 'm s$^{-1}$',
                     'hail': 'in.',
                     'hailcast': 'in.',
-                    'Initialization Time' : 'Initialization Time',
+                    'Initialization Time' : 'Hrs After Mignight',
                     'divergence_10m': 'kts',
                     'div_10m': 'kts',
                     'Run Date' : 'Run Date',

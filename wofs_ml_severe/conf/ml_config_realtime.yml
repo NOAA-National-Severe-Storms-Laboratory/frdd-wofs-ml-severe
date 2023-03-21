@@ -23,11 +23,17 @@ RENAME_TARGETS :
                     
 MODEL_NAMES : [
                'LogisticRegression', 
+               'XGBoost',
+               'Average',
 ]
+
                  
 TARGETS : [
            'wind_severe_0km',
            'hail_severe_0km',
+           'tornado_severe_0km',
+           'all_severe',
+           'all_sig_severe'
           ] 
 
 ENS_VARS  : [ 'uh_0to2_instant',
