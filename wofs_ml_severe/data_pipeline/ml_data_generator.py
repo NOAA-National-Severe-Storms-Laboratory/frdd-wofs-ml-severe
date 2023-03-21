@@ -382,7 +382,7 @@ class MLDataGenerator:
                                 ): 
         """Generate the local explainability JSON file"""
         # Save subset of data for the explainability graphics. 
-        subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 'LOCALEXPLAIN').replace('.nc', '.json') 
+        subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', f'LOCALEXPLAIN__{target}').replace('.nc', '.json') 
     
         # Load the round_dict 
         json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
