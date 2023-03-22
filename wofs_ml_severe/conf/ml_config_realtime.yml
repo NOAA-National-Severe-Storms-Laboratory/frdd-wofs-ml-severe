@@ -22,11 +22,8 @@ RENAME_TARGETS :
     matched_to_severe_wind_0km : 'Severe Wind'
                     
 MODEL_NAMES : [
-               'LogisticRegression', 
-               'XGBoost',
                'Average',
 ]
-
                  
 TARGETS : [
            'wind_severe_0km',
