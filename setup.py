@@ -1,7 +1,7 @@
 # Always prefer setuptools over distutils
 
 import setuptools  # this is the "magic" import
-
+import os
 from numpy.distutils.core import setup, Extension
 
 #from setuptools import setup, find_packages
@@ -12,9 +12,12 @@ here = pathlib.Path(__file__).parent.resolve()
 # Get the long description from the README file
 long_description = (here / 'README.md').read_text(encoding='utf-8')
 
+__key__ = 'PACKAGE_VERSION'
+__version__= os.environ[__key__] if __key__ in os.environ else '0.0.3'
+
 setup(
     name='wofs_ml_severe', 
-    version='0.0.2',
+    version=__version__,
     description='Official WoFS-ML-Severe Repository', 
     long_description=long_description,
     long_description_content_type='text/markdown',  
