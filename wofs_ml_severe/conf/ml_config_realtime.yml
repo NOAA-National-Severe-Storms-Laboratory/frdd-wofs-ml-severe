@@ -14,7 +14,7 @@ BASELINE_VARS :
     hail_severe_0km : 'hail_nmep_>1.0_0km__prob_max'
     wind_severe_0km : 'wind_nmep_>40_0km__prob_max'
     
-ML_MODEL_PATH : '/work/mflora/ML_DATA/NEW_ML_MODELS'
+ML_MODEL_PATH : '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
 
 RENAME_TARGETS : 
     matched_to_severe_hail_0km : 'Severe Hail' 

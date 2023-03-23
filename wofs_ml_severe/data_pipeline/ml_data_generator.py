@@ -256,7 +256,7 @@ class MLDataGenerator:
 
         return forecasts_2d
 
-    def to_xarray(self, data, storm_objects, ds_subset, ensemble_track_file):
+    def to_xarray(self, data, storm_objects, ds_subset, ensemble_track_file, explainability_files):
         """
         Convert the 2D prediction fields to xarray dataset. 
         """
@@ -279,7 +279,7 @@ class MLDataGenerator:
         
         save_dataset(save_nc_file, ds)
 
-        return save_nc_file
+        return [save_nc_file] + explainability_files
         
     def is_there_an_object(self, storm_objects):   
         return np.max(storm_objects) > 0
@@ -291,6 +291,8 @@ class MLDataGenerator:
         prediction_data = {}
         object_labels = dataframe['label']
         times = [time] if not is_list(time) else time
+        
+        explainability_files = [] 
         
         # Create the trimmed objects.
         tag='trimmed'
@@ -355,11 +357,12 @@ class MLDataGenerator:
             
             # Generate the local explainability JSON. 
             if model_name in ['Average', 'LogisticRegression']:
-                self.generate_explainability_json(model, X, target, dataframe, features, 
+                explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
                                      ensemble_track_file, 
                                 )    
-            
-        return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file)
+                explainability_files.append(explainfile) 
+                
+        return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, explainability_files)
 
     def get_top_features(self, inputs, X, features, ind):
         """Using the LR coefficients, determine the top 5 predictors and their values."""
@@ -526,6 +529,7 @@ class MLDataGenerator:
         intensity_img = ensemble_track_ds['w_up__ensemble_probabilities'].values
         updraft_tracks = ensemble_track_ds['updraft_tracks'].values
         generated_files = []
+        
 
         if self.is_there_an_object(storm_objects):
             # Load ENV file
@@ -629,9 +633,9 @@ class MLDataGenerator:
                 time_index = int(env_file.split('_')[-4])
                 time = get_time_str(time_index)
                 
-                mlprob = self.get_predictions(time, dataframe, storm_objects, ds_subset, 
+                mlprob_file = self.get_predictions(time, dataframe, storm_objects, ds_subset, 
                                               ensemble_track_file, ml_config, intensity_img)
-                generated_files.append(mlprob)
+                generated_files.extend(mlprob_file)
             
             ensemble_track_ds.close()
             del ensemble_track_ds
