@@ -125,7 +125,7 @@ FEATURE_SUBSET_DICT :
                    'comp_dz__time_max__amp_ens_mean_spatial_perc_90' : 'comp_refl'
                    'cape_ml__ens_mean__spatial_mean' : 'cape' 
                    
-                   'dbz_3to5__time_max__amp_ens_mean' : 'dbz_3to5'
+                   'dbz_3to5__time_max__amp_ens_mean_spatial_perc_90' : 'dbz_3to5'
                    'w_up__time_max__amp_ens_mean_spatial_perc_90' : 'updraft'
                    
                    'ws_80__time_max__amp_ens_mean_spatial_perc_90' : '80m_wind_spd'
