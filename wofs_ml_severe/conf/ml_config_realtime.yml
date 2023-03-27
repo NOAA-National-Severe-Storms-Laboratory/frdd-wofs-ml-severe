@@ -14,7 +14,7 @@ BASELINE_VARS :
     hail_severe_0km : 'hail_nmep_>1.0_0km__prob_max'
     wind_severe_0km : 'wind_nmep_>40_0km__prob_max'
     
-ML_MODEL_PATH : '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
+ML_MODEL_PATH : '/work/mflora/ML_DATA/NEW_ML_MODELS'
 
 RENAME_TARGETS : 
     matched_to_severe_hail_0km : 'Severe Hail' 
@@ -48,9 +48,12 @@ ENS_VARS  : [ 'uh_0to2_instant',
               'ctt',
               'dbz_3to5', 
               'dbz_1to3', 
-              'okubo_weiss',
               'dbz_1km', 
 ]
+
+# Removed
+#'okubo_weiss',
+
 
 ENV_IN_ENS_VARS : [ 'freezing_level',]
 
@@ -80,7 +83,7 @@ ENV_VARS : [
 
 SVR_VARS : [ 'srh_0to1',
              'srh_0to3',
-             'srh_0to500',
+
              'cape_ml',
              'cin_ml',
              'shear_u_0to6',
@@ -90,16 +93,20 @@ SVR_VARS : [ 'srh_0to1',
              'shear_u_3to6',
              'shear_v_3to6',
              'stp', 
-             'stp_srh0to500',
              'lcl_ml',
            ]
+#'srh_0to500',
+#'stp_srh0to500',
+           
 
 ENS_MIN_VARS : [ 'ctt',
              'buoyancy',
              'div_10m',
              'w_down',
-             'okubo_weiss',
              ]
+# Removed
+#'okubo_weiss',
+             
 
 MORPHOLOGICAL_FEATURES : [
                           'area',
@@ -112,16 +119,16 @@ MORPHOLOGICAL_FEATURES : [
                           ]
                           
 FEATURE_SUBSET_DICT :  
-                   'wz_0to2_instant__time_max__amp_ens_mean' : 'vert_vort' 
-                   'hailcast__time_max__amp_ens_mean' : 'hail_size'
-                   'uh_2to5_instant__time_max__amp_ens_mean' : 'uh'  
-                   'comp_dz__time_max__amp_ens_mean' : 'comp_refl'
+                   'wz_0to2_instant__time_max__amp_ens_mean_spatial_perc_90' : 'vert_vort' 
+                   'hailcast__time_max__amp_ens_mean_spatial_perc_90' : 'hail_size'
+                   'uh_2to5_instant__time_max__amp_ens_mean_spatial_perc_90' : 'uh'  
+                   'comp_dz__time_max__amp_ens_mean_spatial_perc_90' : 'comp_refl'
                    'cape_ml__ens_mean__spatial_mean' : 'cape' 
                    
                    'dbz_3to5__time_max__amp_ens_mean' : 'dbz_3to5'
-                   'w_up__time_max__amp_ens_mean' : 'updraft'
+                   'w_up__time_max__amp_ens_mean_spatial_perc_90' : 'updraft'
                    
-                   'ws_80__time_max__amp_ens_mean' : '80m_wind_spd'
+                   'ws_80__time_max__amp_ens_mean_spatial_perc_90' : '80m_wind_spd'
                    'major_axis_length' : 'major_axis_length' 
                    'minor_axis_length' : 'minor_axis_length' 
                    'low_level_lapse_rate__ens_mean__spatial_mean' : '0-3km_lapse_rate' 
