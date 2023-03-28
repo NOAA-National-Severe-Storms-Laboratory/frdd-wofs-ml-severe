@@ -44,7 +44,7 @@ class StormBasedFeatureExtracter():
         self.cond_var = cond_var
         self.cond_var_thresh = 12.0 
         
-        self.spatial_percentiles_for_amps = [0,100]
+        self.spatial_percentiles_for_amps = [10,90]
         
     def extract(self, storm_objects, intensity_img, storm_data, env_data, init_time, updraft_tracks=None): 
         """
@@ -88,7 +88,7 @@ class StormBasedFeatureExtracter():
             object_props_df['avg_updraft_track_area'] = results[1]
             
         # Get the time-composite intra-storm data 
-        storm_data_time_composite = self.__compute_time_composite(storm_data)
+        storm_data_time_composite = self._compute_time_composite(storm_data)
         
         # Compute the baseline NMEP 
         baseline_probs = self.__get_baseline(storm_data_time_composite)
@@ -178,7 +178,7 @@ class StormBasedFeatureExtracter():
         
         return ensemble_data
         
-    def __compute_time_composite(self, storm_data):
+    def _compute_time_composite(self, storm_data):
         """Compute the time-maximum (minimum) variables"""
         time_max_strm_data = {
             var+'__time_max': np.nanmax(storm_data[var], axis=0)
@@ -393,6 +393,7 @@ class StormBasedFeatureExtracter():
                 c=0
                 for var in var_list:
                     min_var = True if 'min' in var else False
+                    k = 0 if min_var else 1 
                     data = input_data[var]
                     amplitudes = self.ensemble_amplitudes( data = data, 
                                                           storm_points=storm_points, 
@@ -418,6 +419,7 @@ class StormBasedFeatureExtracter():
                         _func = 'minmax' if func == 'minmax' else None
                         if func == 'minmax':
                             func = np.nanmin if min_var else np.nanmax
+                            k = 0 if min_var else 1 
                             
                         for tag, inds in zip(tags, indices_set):
                             if _func == 'minmax' and tag == '__cond':
@@ -426,7 +428,8 @@ class StormBasedFeatureExtracter():
                                 continue
                                 
                             if i == 0:
-                                feature_names.append(f'{var}{name_tag}{tag}')
+                                feature_names.append(
+                                    f'{var}{name_tag}{tag}_spatial_perc_{self.spatial_percentiles_for_amps[k]}')
    
                             features[i, n] = self._generic_function( func,
                                                    input_data=amplitudes[inds],

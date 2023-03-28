@@ -18,6 +18,7 @@ sys.path.append(os.getcwd())
 from skimage.measure import regionprops
 import json 
 import math
+from glob import glob
 
 # Third part modules
 import numpy as np
@@ -236,7 +237,6 @@ class MLDataGenerator:
         
         func = self._append if append else self.generate_ml_severe_files
         
-        
         if isinstance(paths, list):
             run_parallel(
             func=func,
@@ -296,7 +296,7 @@ class MLDataGenerator:
         
         # Create the trimmed objects.
         tag='trimmed'
-        qc_params = [('trim', (9/18, 4/18) )]
+        qc_params = [('trim', (9/18, 4/18))]
         object_props = regionprops(storm_objects, ens_probs) 
         qcer = monte_python.QualityControler()
         storm_objects_trimmed, _ = qcer.quality_control(ens_probs, storm_objects, object_props, qc_params)
@@ -465,7 +465,11 @@ class MLDataGenerator:
         predictors. Therefore, this function is flexible and may change in 
         future. 
         """
-        ensemble_track_file = file_dict['track_file']  
+        ensemble_track_file = file_dict['track_file']
+        
+        base_path = dirname(ensemble_track_file) 
+        t = int(decompose_file_path(ensemble_track_file)['TIME_INDEX'])
+        ens_files = [glob(os.path.join(base_path, f'wofs_ENS_{_t:02d}*'))[0] for _t in range(t-6, t+1)] 
         ml_config = self._load_config(ensemble_track_file) 
         
         # See if there are tracks
@@ -479,24 +483,46 @@ class MLDataGenerator:
         intensity_img = ensemble_track_ds['w_up__ensemble_probabilities'].values
         updraft_tracks = ensemble_track_ds['updraft_tracks'].values
 
-        extracter = StormBasedFeatureExtracter(ml_config, TEMP=self.TEMP)
+
+        extracter = StormBasedFeatureExtracter(ml_config, cond_var=None)
         
         # See if there are tracks
         if self.is_there_an_object(storm_objects):
+            coord_vars = ["xlat", "xlon", "hgt"]
+            try:
+                multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
+                        ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=ml_config['ENS_VARS'])
+            except: 
+                gc.collect()
+                print(f"Issue with {ens_files}. Likely a missing variable ('uh_0to2')")
+                return None 
+            
+            storm_data = xr.Dataset(multiple_datasets_dict)
+            
             object_props_df = extracter.get_object_properties(storm_objects, intensity_img)
             labels = object_props_df['label']
-            results = extracter.area_ratio(storm_objects,
-                                        updraft_tracks=updraft_tracks,
-                                           labels=labels,
-                                     ) 
+            
+            # Get the time-composite intra-storm data 
+            storm_data_time_composite = extracter._compute_time_composite(storm_data)
+            
+            df_amp = extracter.extract_amplitude_features_from_object( 
+                storm_data_time_composite, 
+                storm_objects, 
+                labels, 
+                cond_var=None, 
+                cond_var_thresh=999
+            )
+
             # Open existing dataframe
             ml_data_path = ensemble_track_file.replace('ENSEMBLETRACKS', 'MLDATA').replace('.nc', '.feather')
             ml_df = pd.read_feather(ml_data_path)
             
-            ml_df['avg_updraft_track_area'] = results[1]
+            new_df = pd.concat([ml_df, df_amp], axis=1)
+            new_df.reset_index(inplace=True, drop=True) 
         
             # overwrite the existing file. 
-            ml_df.to_feather(ml_data_path)
+            
+            new_df.to_feather(ml_data_path)
             ensemble_track_ds.close()
             
         return ml_data_path 
@@ -600,8 +626,8 @@ class MLDataGenerator:
             #if self.TEMP:
                 # CTT is in the ENS file. Converting to deg C. 
             #    storm_ds['ctt'] = (5./9.) * (storm_ds['ctt'] - 32.)
-            
-            extracter = StormBasedFeatureExtracter(ml_config)
+
+            extracter = StormBasedFeatureExtracter(ml_config, cond_var=None)
 
             env_data = {**env_data, **svr_data}
         

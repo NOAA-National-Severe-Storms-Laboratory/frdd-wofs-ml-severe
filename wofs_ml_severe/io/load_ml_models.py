@@ -11,17 +11,21 @@ def load_ml_model(retro=False, **parameters):
    
     time = parameters.get('time', 'first_hour')
     target = parameters['target']
-    drop_opt = parameters['drop_opt']
+    drop_opt = parameters.get('drop_opt', '')
     model_name = parameters['model_name']
 
     scaler = 'standard' if model_name in ["LogisticRegression", 'NeuralNetwork'] else None
     
-    if retro:
-        resample = ml_config['RESAMPLE_DICT'][time][target][model_name]
-        model_fname = f'{model_name}_{time}_{target}_{resample}_{scaler}_{drop_opt}.pkl'
-    else:
-        resample = None 
-        model_fname = f'{model_name}_{target}_{resample}_{time}_realtime.joblib'
+    #if retro:
+        #resample = ml_config['RESAMPLE_DICT'][time][target][model_name]
+    #    resample=None
+    #    model_fname = f'{model_name}_{time}_{target}_{resample}_{scaler}_{drop_opt}.pkl'
+    #else:
+    
+    retro_str = 'retro' if retro else 'realtime'
+    
+    resample = None 
+    model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
     
     model = joblib.load(join(PATH, model_fname))
 

@@ -79,13 +79,19 @@ def resample_to_old_dataset(df, original_dates):
     dates = df['Run Date'].apply(str)
     return df.loc[dates.isin(original_dates)]
 
-def get_numeric_init_time(X): 
+def get_numeric_init_time(X):
+    """Convert init time (str) to number of hours after midnight. 
+    WoFS extends into the next day, so hours <=12, add 24 hrs. 
+    """
     Xt = X.copy()
     Xt['timestamp'] = pd.to_datetime(Xt['Initialization Time'].values, format='%H%M')
     minutes_since_midnight = lambda x: x.hour 
     Xt['Initialization Time'] = Xt['timestamp'].apply(minutes_since_midnight)
     
     Xt.drop(['timestamp'], axis=1, inplace=True)
+    
+    hrs = Xt['Initialization Time'].values
+    Xt['Initialization Time'] = np.where(hrs<=12, hrs+24, hrs)
     
     return Xt 
 
@@ -96,6 +102,7 @@ def load_ml_data(target_col,
                  return_only_df=False, 
                  load_reduced=True, 
                  base_path = '/work/mflora/ML_DATA/DATA',
+                 alter_init_times=True,
                 ): 
     """ Loads the ML dataset. 
     
@@ -150,6 +157,8 @@ def load_ml_data(target_col,
         df = df.loc[pd.to_datetime(
             df['Run Date'].apply(str)).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
     else:
+        
+        """
         if isinstance(target_col, list):
             target_col = target_col[0]
             #raise ValueError('At this time, cannot load all severe or all sig severe for the retrospective stuff')
@@ -160,12 +169,15 @@ def load_ml_data(target_col,
             target = target_col.split('_severe_')[0]
       
         target = f'severe_{target}' if target != 'tornado' else target
+        """
         
+        print(f'For simplicity, loading the dates from the original tornado {mode} dataset...')
         if lead_time in ['third_hour', 'fourth_hour']:
             lead_time = 'second_hour'
         
         dates = pd.read_feather(join('/work/mflora/ML_DATA/DATA', 
-                                     'original_dates', f'{mode}_{lead_time}_{target}_dates.feather'))
+                                     'original_dates', f'{mode}_{lead_time}_tornado_dates.feather'))
+        
         original_dates = dates['Dates'].apply(str) 
     
         df = resample_to_old_dataset(df, original_dates)
@@ -178,16 +190,17 @@ def load_ml_data(target_col,
     df = df.loc[df['Initialization Time'].isin(init_times)]
     df.reset_index(inplace=True, drop=True) 
     
-    # Convert the str init times to hours after midnight. 
-    df = get_numeric_init_time(df)
+    metadata_features = ['Run Date', 'forecast_time_index', 
+                         'Initialization Time', 'label', 'obj_centroid_y', 'obj_centroid_x']
+    metadata = df[metadata_features]
+    
+    # Convert the str init times to hours after midnight.
+    if alter_init_times:
+        df = get_numeric_init_time(df)
     
     # For the conditional features, replace the NaNs with zero
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.reset_index(inplace=True, drop=True) 
-    
-    metadata_features = ['Run Date', 'forecast_time_index', 
-                         'Initialization Time', 'label', 'obj_centroid_y', 'obj_centroid_x']
-    metadata = df[metadata_features]
     
     features = [f for f in df.columns if 'severe' not in f]
     features = [f for f in features if f not in metadata_features] 

@@ -181,7 +181,7 @@ class MLDataPipeline(Emailer):
         if self.send_email_bool:
             self.send_email(message, start_time)
         
-    def get_ml_features(self,):
+    def get_ml_features(self):
         """ Extract ML features from the WoFS using the 
         ensemble storm tracks"""
         paths = self.get_files_for_ml()
@@ -195,7 +195,7 @@ class MLDataPipeline(Emailer):
                 
                 mlops(paths, 
                       n_processors=self.n_jobs, 
-                      realtime=False,)
+                      realtime=False)
             except:
                 print(traceback.format_exc())
                 
@@ -255,6 +255,9 @@ class MLDataPipeline(Emailer):
             if self.send_email_bool:
                 self.send_email('Matching to storm reports is finished!', start_time)
     
+    
+    
+    
     def concatenate_dataframes(self,):
         """ Load the ML features and target dataframes
         and concatenate into a single dataframe """
@@ -267,22 +270,41 @@ class MLDataPipeline(Emailer):
         ml_files.remove('/work/mflora/SummaryFiles/20170502/0100/wofs_MLDATA_24_20170503_0230_0300.feather')
         ml_files.remove('/work/mflora/SummaryFiles/20180630/1800/wofs_MLDATA_45_20180630_2115_2145.feather')
         
-        target_files = [f.replace('MLDATA', 'MLTARGETS') for f in ml_files if exists(f.replace('MLDATA', 'MLTARGETS')) ]
+        def concatenate_predictors_and_targets(ml_data_path, targets_data_path):
+            """Concatenate MLDATA and MLTARGETS files into a single dataframe."""
+            #print(ml_data_path, targets_data_path)
+            ml_df = pd.read_feather(ml_data_path)
+            targets_df = pd.read_feather(targets_data_path)
+            combined_df = pd.concat([targets_df, ml_df], axis=1)
+
+            return combined_df 
+    
+        def generate_dataset(ml_data_paths):
+            """Concatenate all the dataframes into a single dataframe"""
+            target_data_paths = [path.replace('MLDATA', 'MLTARGETS') for path in ml_data_paths]
+            which_exist = [os.path.exists(p) for p in target_data_paths]
+            ml_data_paths = np.array(ml_data_paths)[which_exist]
+            target_data_paths = np.array(target_data_paths)[which_exist]
+    
+            df_set = [concatenate_predictors_and_targets(ml_data_path, targets_data_path) for 
+                     ml_data_path, targets_data_path in zip(ml_data_paths, target_data_paths)]
+    
+            final_df = pd.concat(df_set, axis=0, ignore_index=True)
+    
+            return final_df 
         
-        print(f'{len(target_files)=} {len(ml_files)=}')
+        final_df = generate_dataset(ml_files)
         
-        dfs = [pd.read_feather(f) for f in ml_files]
-        
-        feature_df = pd.concat(dfs, ignore_index=True, axis=0)
-        target_df = pd.concat([pd.read_feather(f) for f in target_files], axis=0, ignore_index=True)
-        
-        forecast_time_index = [int(decompose_file_path(f)['TIME_INDEX']) - delta_time_step for f in ml_files]
-        forecast_time_index = [[ind]*len(_df) for ind, _df in zip(forecast_time_index, dfs)] 
-        forecast_time_index = [item for sublist in forecast_time_index for item in sublist]
-        
-        old_df = pd.concat([feature_df, target_df], axis=1) 
-        df = old_df.copy()
-        
+        #target_files = [f.replace('MLDATA', 'MLTARGETS') for f in ml_files if exists(f.replace('MLDATA', 'MLTARGETS')) ]
+        #print(f'{len(target_files)=} {len(ml_files)=}')
+        #dfs = [pd.read_feather(f) for f in ml_files]
+        #feature_df = pd.concat(dfs, ignore_index=True, axis=0)
+        #target_df = pd.concat([pd.read_feather(f) for f in target_files], axis=0, ignore_index=True)
+        #forecast_time_index = [int(decompose_file_path(f)['TIME_INDEX']) - delta_time_step for f in ml_files]
+        #forecast_time_index = [[ind]*len(_df) for ind, _df in zip(forecast_time_index, dfs)] 
+        #forecast_time_index = [item for sublist in forecast_time_index for item in sublist]
+        #old_df = pd.concat([feature_df, target_df], axis=1) 
+        #df = old_df.copy()
         #df['forecast_time_index'] = np.array(forecast_time_index, dtype=np.int8) 
         
         hr_size = 12 
@@ -293,7 +315,7 @@ class MLDataPipeline(Emailer):
         
         for name, rng in tqdm(zip(names, ranges), desc='Saving datasets'): 
             # Get the examples within a particular forecast time index range.
-            _df = df[df['forecast_time_index'].isin(rng).values].reset_index(drop=True) 
+            _df = final_df[final_df['forecast_time_index'].isin(rng).values].reset_index(drop=True) 
             
             baseline_features = [f for f in _df.columns if '__prob_max' in f]
             targets = [f for f in _df.columns if 'severe' in f]

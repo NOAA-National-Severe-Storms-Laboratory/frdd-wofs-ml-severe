@@ -33,9 +33,10 @@ def get_valid_time(filename, offset=6, dt=5):
 
 class MatchReportsToTracks:
     """Produces the MLTARGETS dataframe."""
-    def __init__(self, min_dists=[0,2,5,10], err_window=15):
+    def __init__(self, min_dists=[0,2,5,10], err_window=15, return_df=False):
         self._min_dists = min_dists
         self.err_window = err_window
+        self.return_df = return_df
 
     def get_reports(self, ncfile, 
                 reports_path='/work/mflora/LSRS/STORM_EVENTS_2017-2022.csv', 
@@ -52,6 +53,8 @@ class MatchReportsToTracks:
             err_window=self.err_window, 
             )
  
+       ### print(report.start_date, report.end_date) 
+
         report_lsrs = StormReportLoader(
             '/work/mflora/LSRS/lsr_201703010000_202106090000.csv',
             'IOWA',
@@ -144,10 +147,11 @@ class MatchReportsToTracks:
                 return None 
             
         df = pd.DataFrame(targets_data)
+        if self.return_df:
+            return df
+        
         target_file = track_file.replace('ENSEMBLETRACKS', 'MLTARGETS').replace('.nc', '.feather')
-            
         df.to_feather(target_file)
-
         gc.collect()
         
         return target_file
