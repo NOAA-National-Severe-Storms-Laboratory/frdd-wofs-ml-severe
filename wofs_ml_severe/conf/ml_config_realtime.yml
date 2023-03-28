@@ -49,10 +49,8 @@ ENS_VARS  : [ 'uh_0to2_instant',
               'dbz_3to5', 
               'dbz_1to3', 
               'dbz_1km', 
+              'okubo_weiss',
 ]
-
-# Removed
-#'okubo_weiss',
 
 
 ENV_IN_ENS_VARS : [ 'freezing_level',]
@@ -83,7 +81,6 @@ ENV_VARS : [
 
 SVR_VARS : [ 'srh_0to1',
              'srh_0to3',
-
              'cape_ml',
              'cin_ml',
              'shear_u_0to6',
@@ -94,19 +91,19 @@ SVR_VARS : [ 'srh_0to1',
              'shear_v_3to6',
              'stp', 
              'lcl_ml',
+             'srh_0to500',
+             'stp_srh0to500',
            ]
-#'srh_0to500',
-#'stp_srh0to500',
+
            
 
 ENS_MIN_VARS : [ 'ctt',
              'buoyancy',
              'div_10m',
              'w_down',
+             'okubo_weiss',
              ]
-# Removed
-#'okubo_weiss',
-             
+
 
 MORPHOLOGICAL_FEATURES : [
                           'area',
