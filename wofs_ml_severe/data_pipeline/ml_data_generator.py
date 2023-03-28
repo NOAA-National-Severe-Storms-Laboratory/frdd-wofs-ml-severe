@@ -102,6 +102,13 @@ def get_time_str(ts):
         
     return time 
 
+def fix_data(X): 
+    #X = X.astype({'Initialization Time' : str})
+    X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    X.reset_index(inplace=True, drop=True)
+    
+    return X 
+
 def just_transforms(model, X):
     """Applies all transforms to the data, without applying last 
        estimator.
@@ -112,9 +119,7 @@ def just_transforms(model, X):
         Data to predict on. Must fulfill input requirements of first step of
         the pipeline.
     """
-    X['Initialization Time'] = X['Initialization Time'].astype(str)
-    X.replace([np.inf, -np.inf], np.nan, inplace=True)
-    X.reset_index(inplace=True, drop=True)
+    X = fix_data(X)
     
     Xt = X
     for name, transform in model.steps[:-1]:
@@ -137,13 +142,6 @@ def lr_inputs(model, X):
     inputs = coef*Xt
     
     return inputs
-
-def fix_data(X): 
-    X = X.astype({'Initialization Time' : str})
-    X.replace([np.inf, -np.inf], np.nan, inplace=True)
-    X.reset_index(inplace=True, drop=True)
-    
-    return X 
 
 
 def get_target_str(target):
@@ -330,8 +328,9 @@ class MLDataGenerator:
                     X = dataframe[features] 
                     X = fix_data(X)
                     
+                    # Deprecated due to issues with Initialization time. 
                     # Get the numeric init time 
-                    X = get_numeric_init_time(X)
+                    #X = get_numeric_init_time(X)
                     
                     # Compute the probabilities.
                     predictions.append(model.predict_proba(X)[:,1])
