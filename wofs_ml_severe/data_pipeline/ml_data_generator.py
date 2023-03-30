@@ -358,13 +358,16 @@ class MLDataGenerator:
             if self.explain:
                 if model_name in ['Average', 'LogisticRegression']:
                     explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
-                                     ensemble_track_file, ml_config
+                                     ensemble_track_file, ml_config, scale='local'                               
                                 )    
                     explainability_files.append(explainfile) 
                 
                 # Generate the global explainability JSON. 
-                global_explainfile = self.generate_global_explainability_json(target, dataframe, 
-                                                                              ensemble_track_file, ml_config)    
+                global_explainfile = self.generate_explainability_json(model, 
+                                                                              X, target, 
+                                                                              dataframe, features, 
+                                                                             ensemble_track_file, ml_config,
+                                                                             scale = 'global')    
                 explainability_files.append(global_explainfile)     
                 
                 
@@ -387,14 +390,11 @@ class MLDataGenerator:
     
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
-                                     ensemble_track_file, ml_config
+                                     ensemble_track_file, ml_config, scale='local'
                                 ): 
-        """Generate the local explainability JSON file"""
+        """Generate the local or global explainability JSON file"""
         target_str = ml_config['TARGET_CONVERTER'].get(target, target)
         
-        # Save subset of data for the explainability graphics. 
-        subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', f'LOCALEXPLAIN__{target_str}').replace('.nc', '.json') 
-    
         # Load the round_dict 
         json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
         
@@ -408,80 +408,53 @@ class MLDataGenerator:
         metadata = dataframe[['label', 'obj_centroid_x', 'obj_centroid_y', 'ens_track_prob']]
         metadata ['ens_track_prob'] = (metadata ['ens_track_prob']*18).astype(int)
         
-        inputs = lr_inputs(model, X)
-        
-        #if self.TEMP:
-        #    dataframe['low_level_lapse_rate__ens_mean__spatial_mean']/=-3.0
-        #    dataframe['mid_level_lapse_rate__ens_mean__spatial_mean']/=-2.67765
-        
         # Round the data. 
         dataframe = dataframe.round(round_dict)
         
-        results = [self.get_top_features(inputs[i,:], dataframe, features, i) for i in range(inputs.shape[0])]
+        # Save subset of data for the explainability graphics. 
+        explain_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 
+                                                    f'{scale.upper()}EXPLAIN__{target_str}').replace('.nc', '.json')
+        
+        if scale == 'local': 
+            # The local explainability works by determining the predictors with the highest val*coef values.
+            # This assumption might be neglecting the impact of correlated features and compensating effects
+            # within the model. 
+            inputs = lr_inputs(model, X)
+        
+            results = [self.get_top_features(inputs[i,:], dataframe, features, i) for i in range(inputs.shape[0])]
     
-        top_features = [r[0] for r in results]
-        # The lists are nested. 
-        top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
-        top_values = np.array([r[1] for r in results])
+            top_features = [r[0] for r in results]
+            # The lists are nested. 
+            top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
+            top_values = np.array([r[1] for r in results])
+    
+        else:
+            # The global explainability uses a static list of top features, which was determined 
+            # by the features with the highest sum total of abs(coefs) for the first and second hour datasets. 
+            n_examples = len(dataframe)
+            top_features_ = list(ml_config['TOP_FEATURES'][target_str])
+            top_values = dataframe[top_features_].values 
+            top_features = [list(top_features_) for _ in range(n_examples)]
+            
     
         val_df = pd.DataFrame(top_values, columns=[f'Feature Val {i+1}' for i in range(5)])
         feature_df = pd.DataFrame(top_features, columns=[f'Feature Name {i+1}' for i in range(5)])
     
         total_df = pd.concat([val_df, feature_df, metadata], axis=1)
 
-        print(f'Saving {subset_fname}...')
-        total_df.to_json(subset_fname)
+        print(f'Saving {explain_fname}...')
+        total_df.to_json(explain_fname)
     
-        return subset_fname
-    
-    
-    def generate_global_explainability_json(self, target, dataframe, ensemble_track_file, ml_config):
-        """Generate the Global Explainability Graphics """
-        target_str = ml_config['TARGET_CONVERTER'].get(target, target)
-        
-        # Save subset of data for the explainability graphics. 
-        explain_fname = ensemble_track_file.replace('ENSEMBLETRACKS', f'GLOBALEXPLAIN_{target_str}').replace('.nc', '.json') 
-        
-        
-        top_features = list(ml_config['TOP_FEATURES'][target_str])
-        
-        df_subset = dataframe[top_features+['label', 'obj_centroid_x', 'obj_centroid_y', 'ens_track_prob']]
-        df_subset['ens_track_prob'] = (df_subset['ens_track_prob']*18).astype(int)
-        
-         # Load the round_dict 
-        json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
-        
-        with open(json_file) as f:
-            results = json.load(f)
-    
-        round_dict = {f : results[f]['round_int'] for f in top_features}
-        
-        df_subset = df_subset.round(round_dict)
-        
-        df_subset.to_json(explain_fname)
-        
         return explain_fname
-        
+
     def _load_config(self, path_to_summary_file):
         """Loads the YAML config file for the ML dataset"""
         path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
         if self.ml_config_path is not None:
               ml_config_path = self.ml_config_path
         else:
-            #if self.realtime: 
-            #print("Loading the real time configuration file...")
             ml_config_path = join(path, 'ml_config_realtime.yml')
-            #else:
-            #    comps = decompose_file_path(path_to_summary_file)
-            #    year = comps['VALID_DATE'][:4]
-            #    if year == '2017':
-            #        ml_config_path = join(path, 'ml_config_2017.yml')
-            #    elif year in ['2018', '2019']:
-            #        ml_config_path = join(path, 'ml_config_2018-19.yml')
-            #    else:
-            #        ml_config_path = join(path, 'ml_config_2020-current.yml')
-        
-        ###print(f'{ml_config_path=}')
+
         return load_yaml(ml_config_path)
     
     def decompose_path(self, path):
@@ -517,7 +490,6 @@ class MLDataGenerator:
         storm_objects = ensemble_track_ds['w_up__ensemble_tracks'].values
         intensity_img = ensemble_track_ds['w_up__ensemble_probabilities'].values
         updraft_tracks = ensemble_track_ds['updraft_tracks'].values
-
 
         extracter = StormBasedFeatureExtracter(ml_config, cond_var=None)
         
@@ -648,25 +620,20 @@ class MLDataGenerator:
                 gc.collect()
                 print(f"Issue with {ens_files}. Likely a missing variable ('uh_0to2')")
                 return None 
-        
-            # Correct the naming convention. 
-            # Deprecated on 23 FEB 2023. Keeping the 'instant' distinction lets
-            # me know which type I am using. 
-            ##multiple_datasets_dict = self._correct_naming(multiple_datasets_dict)
-           
+       
+            # Convert data to xarray.Dataset 
             storm_ds = xr.Dataset(multiple_datasets_dict)
             
-            # Deprecated on 17 March 2023 
-            #if self.TEMP:
-                # CTT is in the ENS file. Converting to deg C. 
-            #    storm_ds['ctt'] = (5./9.) * (storm_ds['ctt'] - 32.)
-
+            # Initialize the Extracter class. 
             extracter = StormBasedFeatureExtracter(ml_config, cond_var=None)
 
+            # Combine the ENV and SVR file output together. 
             env_data = {**env_data, **svr_data}
         
+            # Determine the Run date and Init. time from the file path. 
             run_date, init_time = self.decompose_path(env_file) 
             
+            # Run the extracter. Returns the data as a dataframe. 
             dataframe = extracter.extract(storm_objects,
                                       intensity_img,
                                       storm_ds, 
@@ -681,13 +648,14 @@ class MLDataGenerator:
             ds_svr.close()
             del storm_ds, ds_env, ds_svr
 
-            # Add the run date
+            # Add the run date as metadata. 
             dataframe['Run Date'] = [int(run_date)] * len(dataframe)
 
             # Add the forecast time index. 
             time_index = decompose_file_path(env_file)['TIME_INDEX']
             dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
             
+            # If we are running in realtime, then we want to generate the predictions.
             if self.predict:
                 # Check the time index to determine the right model. 
                 time_index = int(env_file.split('_')[-4])
@@ -707,35 +675,29 @@ class MLDataGenerator:
             if self.debug:
                 save_df_file = join(self._outdir, basename(save_df_file))
             
-            ###print(f'Saving the dataframe @ {save_df_file}...')
             dataframe.to_feather(save_df_file)
         
-            """
-            # Save subset of data for the explainability graphics. 
-            subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 'EXPLAIN').replace('.nc', '.json') 
+        
+            # Generate the EXPLAIN json file (soon to be deprecated!).
             if self.explain:
+                explain_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 'EXPLAIN').replace('.nc', '.json') 
+                # Get the feature values for the EXPLAIN file. 
                 df_subset = dataframe[list(ml_config['FEATURE_SUBSET_DICT'].keys())+\
                                   ['label', 'obj_centroid_x', 'obj_centroid_y']] 
             
                 df_subset = df_subset.rename(columns = ml_config['FEATURE_SUBSET_DICT']) 
-        
-                #if self.TEMP:
-                    # Convert the lapse rates back into lapse rates rather than temp diffs. 
-                #    df_subset['0-3km_lapse_rate']/=-3.0
-                #    df_subset['500-700mb_lapse_rate']/=-2.67765
-            
                 # Round the values. 
                 df_subset = df_subset.round(ml_config['ROUNDING'])
+                
+                # Temporary conversion!!
+                df_subset['0-3km_lapse_rate' ] *= -1
+                df_subset['500-700mb_lapse_rate' ] *= -1
+                
+                # Save the EXPLAIN file. 
+                df_subset.to_json(explain_fname)
+
             
-                ###print(f'Saving the explainability dataset @ {subset_fname}...')
-                if self.debug:
-                    subset_fname = join(self._outdir, basename(subset_fname))
-                    #subset_fname = basename(subset_fname)
-                    
-                df_subset.to_json(subset_fname)
-            """
-            
-            return [save_df_file] + generated_files
+            return [save_df_file, explain_fname] + generated_files
 
         else:
             if self.predict:
