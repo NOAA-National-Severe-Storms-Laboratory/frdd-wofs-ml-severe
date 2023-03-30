@@ -355,11 +355,18 @@ class MLDataGenerator:
                 prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'], predictions_2d)
             
             # Generate the local explainability JSON. 
-            if model_name in ['Average', 'LogisticRegression']:
-                explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
-                                     ensemble_track_file, 
+            if self.explain:
+                if model_name in ['Average', 'LogisticRegression']:
+                    explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
+                                     ensemble_track_file, ml_config
                                 )    
-                explainability_files.append(explainfile) 
+                    explainability_files.append(explainfile) 
+                
+                # Generate the global explainability JSON. 
+                global_explainfile = self.generate_global_explainability_json(target, dataframe, 
+                                                                              ensemble_track_file, ml_config)    
+                explainability_files.append(global_explainfile)     
+                
                 
         return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, explainability_files)
 
@@ -380,11 +387,13 @@ class MLDataGenerator:
     
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
-                                     ensemble_track_file, 
+                                     ensemble_track_file, ml_config
                                 ): 
         """Generate the local explainability JSON file"""
+        target_str = ml_config['TARGET_CONVERTER'].get(target, target)
+        
         # Save subset of data for the explainability graphics. 
-        subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', f'LOCALEXPLAIN__{target}').replace('.nc', '.json') 
+        subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', f'LOCALEXPLAIN__{target_str}').replace('.nc', '.json') 
     
         # Load the round_dict 
         json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
@@ -426,6 +435,33 @@ class MLDataGenerator:
         return subset_fname
     
     
+    def generate_global_explainability_json(self, target, dataframe, ensemble_track_file, ml_config):
+        """Generate the Global Explainability Graphics """
+        target_str = ml_config['TARGET_CONVERTER'].get(target, target)
+        
+        # Save subset of data for the explainability graphics. 
+        explain_fname = ensemble_track_file.replace('ENSEMBLETRACKS', f'GLOBALEXPLAIN_{target_str}').replace('.nc', '.json') 
+        
+        
+        top_features = list(ml_config['TOP_FEATURES'][target_str])
+        
+        df_subset = dataframe[top_features+['label', 'obj_centroid_x', 'obj_centroid_y', 'ens_track_prob']]
+        df_subset['ens_track_prob'] = (df_subset['ens_track_prob']*18).astype(int)
+        
+         # Load the round_dict 
+        json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
+        
+        with open(json_file) as f:
+            results = json.load(f)
+    
+        round_dict = {f : results[f]['round_int'] for f in top_features}
+        
+        df_subset = df_subset.round(round_dict)
+        
+        df_subset.to_json(explain_fname)
+        
+        return explain_fname
+        
     def _load_config(self, path_to_summary_file):
         """Loads the YAML config file for the ML dataset"""
         path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
@@ -526,7 +562,6 @@ class MLDataGenerator:
             
         return ml_data_path 
         
-
     def generate_ml_severe_files(self, file_dict):
         """
         Generates the dataframe of input features, the file for the explainability graphic, 
@@ -675,9 +710,9 @@ class MLDataGenerator:
             ###print(f'Saving the dataframe @ {save_df_file}...')
             dataframe.to_feather(save_df_file)
         
+            """
             # Save subset of data for the explainability graphics. 
             subset_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 'EXPLAIN').replace('.nc', '.json') 
-            
             if self.explain:
                 df_subset = dataframe[list(ml_config['FEATURE_SUBSET_DICT'].keys())+\
                                   ['label', 'obj_centroid_x', 'obj_centroid_y']] 
@@ -698,8 +733,9 @@ class MLDataGenerator:
                     #subset_fname = basename(subset_fname)
                     
                 df_subset.to_json(subset_fname)
-        
-            return [save_df_file, subset_fname] + generated_files
+            """
+            
+            return [save_df_file] + generated_files
 
         else:
             if self.predict:

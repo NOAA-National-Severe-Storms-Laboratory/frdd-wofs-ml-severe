@@ -32,6 +32,12 @@ TARGETS : [
            'all_severe',
            'all_sig_severe'
           ] 
+          
+TARGET_CONVERTER : 
+                wind_severe_0km : 'wind'
+                hail_severe_0km : 'hail'
+                tornado_severe_0km : 'tornado'
+          
 
 ENS_VARS  : [ 'uh_0to2_instant',
               'uh_2to5_instant',
@@ -115,33 +121,34 @@ MORPHOLOGICAL_FEATURES : [
                           'intensity_max',
                           ]
                           
-FEATURE_SUBSET_DICT :  
-                   'wz_0to2_instant__time_max__amp_ens_mean_spatial_perc_90' : 'vert_vort' 
-                   'hailcast__time_max__amp_ens_mean_spatial_perc_90' : 'hail_size'
-                   'uh_2to5_instant__time_max__amp_ens_mean_spatial_perc_90' : 'uh'  
-                   'comp_dz__time_max__amp_ens_mean_spatial_perc_90' : 'comp_refl'
-                   'cape_ml__ens_mean__spatial_mean' : 'cape' 
-                   
-                   'dbz_3to5__time_max__amp_ens_mean_spatial_perc_90' : 'dbz_3to5'
-                   'w_up__time_max__amp_ens_mean_spatial_perc_90' : 'updraft'
-                   
-                   'ws_80__time_max__amp_ens_mean_spatial_perc_90' : '80m_wind_spd'
-                   'major_axis_length' : 'major_axis_length' 
-                   'minor_axis_length' : 'minor_axis_length' 
-                   'low_level_lapse_rate__ens_mean__spatial_mean' : '0-3km_lapse_rate' 
-                   'mid_level_lapse_rate__ens_mean__spatial_mean' : '500-700mb_lapse_rate'
-                 
-
-ROUNDING : 
-    'vert_vort' : 4
-    'hail_size' : 2
-    'uh' : 0
-    'comp_refl' : 0 
-    'cape' : 0
-    'dbz_3to5' : 0 
-    'updraft': 1 
-    '80m_wind_spd' : 0
-    'major_axis_length' : 0 
-    'minor_axis_length' : 0
-    '0-3km_lapse_rate' : 2
-    '500-700mb_lapse_rate' : 2
+TOP_FEATURES:
+  tornado:
+    - 'wz_0to2_instant__time_max__amp_ens_mean_spatial_perc_90'
+    - 'shear_v_0to6__ens_mean__spatial_mean'
+    - 'buoyancy__time_min__amp_ens_mean_spatial_perc_10'
+    - '10-500m_bulkshear__time_max__amp_ens_mean_spatial_perc_90'
+    - 'v_10__ens_mean__spatial_mean'
+  hail:
+    - 'dbz_3to5__time_max__ens_mean__spatial_mean'
+    - 'comp_dz__time_max__amp_ens_mean_spatial_perc_90'
+    - 'td_850__ens_mean__spatial_mean'
+    - '10-500m_bulkshear__time_max__ens_mean__spatial_mean'
+    - 'w_down__time_min__amp_ens_mean_spatial_perc_10'
+  wind:
+    - 'v_10__ens_mean__spatial_mean'
+    - 'ws_80__time_max__amp_ens_mean_spatial_perc_90'
+    - 'comp_dz__time_max__amp_ens_mean_spatial_perc_90'
+    - 'div_10m__time_min__ens_mean__spatial_mean'
+    - 'buoyancy__time_min__amp_ens_mean_spatial_perc_10'
+  all_severe:
+    - 'comp_dz__time_max__amp_ens_mean_spatial_perc_90'
+    - 'div_10m__time_min__ens_std__spatial_mean'
+    - 'ctt__time_min__amp_ens_mean_spatial_perc_10'
+    - 'hailcast__time_max__ens_mean__spatial_mean'
+    - '10-500m_bulkshear__time_max__ens_mean__spatial_mean'
+  all_sig_severe:
+    - 'low_level_lapse_rate__ens_mean__spatial_mean'
+    - 'ctt__time_min__amp_ens_mean_spatial_perc_10'
+    - '10-500m_bulkshear__time_max__ens_mean__spatial_mean'
+    - 'hailcast__time_max__ens_mean__spatial_mean'
+    - 'comp_dz__time_max__amp_ens_mean_spatial_perc_90'
