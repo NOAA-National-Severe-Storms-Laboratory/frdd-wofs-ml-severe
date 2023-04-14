@@ -708,7 +708,7 @@ class MLDataGenerator:
                     model_name, target = pair
                     prediction_data[f'{model_name}__{target}'] = (['NY', 'NX'],
                                                           np.zeros((storm_objects.shape), dtype=np.int32))
-                generated_files.append(self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file))
+                generated_files.append(self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, []))
                 ds_env.close()
                 gc.collect()
                 del ds_env
