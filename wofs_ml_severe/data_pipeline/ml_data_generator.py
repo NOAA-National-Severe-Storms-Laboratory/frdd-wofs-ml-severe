@@ -449,12 +449,14 @@ class MLDataGenerator:
 
     def _load_config(self, path_to_summary_file):
         """Loads the YAML config file for the ML dataset"""
-        path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
         if self.ml_config_path is not None:
-              ml_config_path = self.ml_config_path
+            ml_config_path = self.ml_config_path
         else:
+            path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
             ml_config_path = join(path, 'ml_config_realtime.yml')
 
+        print(f'Loading config file: {ml_config_path}....')    
+            
         return load_yaml(ml_config_path)
     
     def decompose_path(self, path):
@@ -464,7 +466,6 @@ class MLDataGenerator:
         run_date = basename(dirname(outer_path))
     
         return run_date, init_time
-    
     
     def _append(self, file_dict):
         """
