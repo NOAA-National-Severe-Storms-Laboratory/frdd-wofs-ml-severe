@@ -27,6 +27,7 @@ from tqdm import tqdm
 from ..common.emailer import Emailer
 from ..common.multiprocessing_utils import run_parallel, to_iterator
 from ..common.util import decompose_file_path, save_dataset
+from ..io.io import load_ml_data
 
 from .ensemble_track_segmentation import generate_ensemble_track_file
 from .ml_data_generator import MLDataGenerator
@@ -255,9 +256,6 @@ class MLDataPipeline(Emailer):
             if self.send_email_bool:
                 self.send_email('Matching to storm reports is finished!', start_time)
     
-    
-    
-    
     def concatenate_dataframes(self,):
         """ Load the ML features and target dataframes
         and concatenate into a single dataframe """
@@ -292,21 +290,29 @@ class MLDataPipeline(Emailer):
             final_df = pd.concat(df_set, axis=0, ignore_index=True)
     
             return final_df 
+    
+        def remove_bad_data(X, X_bl):
+            # Remove obviously bad data. 
+    
+            feature_rngs = {'w_up__time_max__amp_ens_max' : 100,
+                'comp_dz__time_max__amp_ens_max' : 90,
+                'cape_ml__ens_mean__spatial_mean' : 20000,
+               }
+                
+            X_subset = X.copy()
+            X_bl_subset = X_bl.copy() 
+            for f, val in feature_rngs.items(): 
+                X_bl_subset = X_bl_subset.loc[X_subset[f].values<=val]
+                X_subset = X_subset.loc[X_subset[f].values<=val]
         
+            X_subset.reset_index(inplace=True, drop=True)
+            X_bl_subset.reset_index(inplace=True, drop=True)
+
+            return X_subset, X_bl_subset 
+    
+    
         final_df = generate_dataset(ml_files)
-        
-        #target_files = [f.replace('MLDATA', 'MLTARGETS') for f in ml_files if exists(f.replace('MLDATA', 'MLTARGETS')) ]
-        #print(f'{len(target_files)=} {len(ml_files)=}')
-        #dfs = [pd.read_feather(f) for f in ml_files]
-        #feature_df = pd.concat(dfs, ignore_index=True, axis=0)
-        #target_df = pd.concat([pd.read_feather(f) for f in target_files], axis=0, ignore_index=True)
-        #forecast_time_index = [int(decompose_file_path(f)['TIME_INDEX']) - delta_time_step for f in ml_files]
-        #forecast_time_index = [[ind]*len(_df) for ind, _df in zip(forecast_time_index, dfs)] 
-        #forecast_time_index = [item for sublist in forecast_time_index for item in sublist]
-        #old_df = pd.concat([feature_df, target_df], axis=1) 
-        #df = old_df.copy()
-        #df['forecast_time_index'] = np.array(forecast_time_index, dtype=np.int8) 
-        
+         
         hr_size = 12 
         hr_rng = np.arange(13)
         
@@ -328,8 +334,45 @@ class MLDataPipeline(Emailer):
             baseline_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__baseline_data.feather'))
             ml_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__data.feather'))
 
+            
+        # Prune the dataset of bad examples
+        times = ['first_hour', 'second_hour', 'third_hour', 'fourth_hour']
+        base_path = '/work/mflora/ML_DATA/DATA'
+
+        for time in times: 
+            X = load_ml_data('hail_severe_0km', 
+                 lead_time = time, 
+                 mode = None, 
+                 return_only_df=True,
+                 base_path = '/work/mflora/ML_DATA/DATA',
+                 load_reduced=False,
+                 alter_init_times=False,
+                )
+    
+            X_bl = load_ml_data('hail_severe_0km', 
+                 lead_time = time, 
+                 mode = None, 
+                 return_only_df=True,
+                 baseline=True,
+                 base_path = '/work/mflora/ML_DATA/DATA',
+                 load_reduced=False,
+                 alter_init_times=False,
+                )
+    
+            blpath = os.path.join(base_path, f'wofs_ml_severe__{time}__baseline_reduced_data.feather')
+            path = os.path.join(base_path, f'wofs_ml_severe__{time}__reduced_data.feather')
+    
+            X_new, X_bl_new = remove_bad_data(X, X_bl)
+
+            # Save the reduced dataset. 
+            X_new, X_bl_new = remove_bad_data(X, X_bl)
+
+            X_new.to_feather(path)
+            X_bl_new.to_feather(blpath)
+        
+            
         if self.send_email_bool:
-            self.send_email('Final datasets are built!', start_time)
+            self.send_email('Final datasets are built and pruned!', start_time)
     
     def get_files(self, file_type):
         """Returns a list of all file names of the given file type."""

@@ -87,8 +87,9 @@ ENV_VARS : [
 
 SVR_VARS : [ 'srh_0to1',
              'srh_0to3',
-             'cape_ml',
-             'cin_ml',
+             'cape_mu',
+             'cin_mu',
+             'lcl_mu',
              'shear_u_0to6',
              'shear_v_0to6',
              'shear_u_0to1',
@@ -96,13 +97,11 @@ SVR_VARS : [ 'srh_0to1',
              'shear_u_3to6',
              'shear_v_3to6',
              'stp', 
-             'lcl_ml',
              'srh_0to500',
              'stp_srh0to500',
            ]
 
            
-
 ENS_MIN_VARS : [ 'ctt',
              'buoyancy',
              'div_10m',
@@ -120,6 +119,37 @@ MORPHOLOGICAL_FEATURES : [
                           'major_axis_length',
                           'intensity_max',
                           ]
+                          
+ROUNDING : 
+    'vert_vort' : 4
+    'hail_size' : 2
+    'uh' : 0
+    'comp_refl' : 0 
+    'cape' : 0
+    'dbz_3to5' : 0 
+    'updraft': 1 
+    '80m_wind_spd' : 0
+    'major_axis_length' : 0 
+    'minor_axis_length' : 0
+    '0-3km_lapse_rate' : 2
+    '500-700mb_lapse_rate' : 2
+    
+FEATURE_SUBSET_DICT :  
+                   'wz_0to2_instant__time_max__amp_ens_mean_spatial_perc_90' : 'vert_vort' 
+                   'hailcast__time_max__amp_ens_mean_spatial_perc_90' : 'hail_size'
+                   'uh_2to5_instant__time_max__amp_ens_mean_spatial_perc_90' : 'uh'  
+                   'comp_dz__time_max__amp_ens_mean_spatial_perc_90' : 'comp_refl'
+                   'cape_mu__ens_mean__spatial_mean' : 'cape' 
+                   
+                   'dbz_3to5__time_max__amp_ens_mean_spatial_perc_90' : 'dbz_3to5'
+                   'w_up__time_max__amp_ens_mean_spatial_perc_90' : 'updraft'
+                   
+                   'ws_80__time_max__amp_ens_mean_spatial_perc_90' : '80m_wind_spd'
+                   'major_axis_length' : 'major_axis_length' 
+                   'minor_axis_length' : 'minor_axis_length' 
+                   'low_level_lapse_rate__ens_mean__spatial_mean' : '0-3km_lapse_rate' 
+                   'mid_level_lapse_rate__ens_mean__spatial_mean' : '500-700mb_lapse_rate'                          
+                          
                           
 TOP_FEATURES:
   tornado:

@@ -91,13 +91,13 @@ class StormBasedFeatureExtracter():
         storm_data_time_composite = self._compute_time_composite(storm_data)
         
         # Compute the baseline NMEP 
-        baseline_probs = self.__get_baseline(storm_data_time_composite)
+        baseline_probs = self._get_baseline(storm_data_time_composite)
         
         # Combine the time composites with the environmental data 
         combined_data = {**env_data, **storm_data_time_composite}
         
         # Compute ens. statistics (data is still 2d at this point). 
-        ensemble_data = self.__compute_ens_stats(combined_data)
+        ensemble_data = self._compute_ens_stats(combined_data)
         
         # Extract the spatial-based features.
         df_spatial = self.extract_spatial_features_from_object( 
@@ -141,7 +141,7 @@ class StormBasedFeatureExtracter():
         """Check if there is at least one storm object"""
         return np.max(storm_objects) > 0 
         
-    def __compute_ens_stats(self, data):
+    def _compute_ens_stats(self, data):
         """Compute the ensemble mean, standard dev., and ensemble maximum/minimum"""
         data_vars = list(data.keys())
         
@@ -197,7 +197,7 @@ class StormBasedFeatureExtracter():
         return storm_data_time_composite
         
     
-    def __get_baseline(self, data):
+    def _get_baseline(self, data):
         """Compute the baseline uncalibrated NMEP probabilities"""
         UH_THRESHS = self.ml_config['UH_THRESHS']
         WIND_THRESHS = self.ml_config['WIND_THRESHS']

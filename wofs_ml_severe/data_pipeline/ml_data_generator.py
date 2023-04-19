@@ -467,6 +467,7 @@ class MLDataGenerator:
     
         return run_date, init_time
     
+    
     def _append(self, file_dict):
         """
         This function is used to append columns onto existing ML dataframes.
@@ -478,7 +479,10 @@ class MLDataGenerator:
         
         base_path = dirname(ensemble_track_file) 
         t = int(decompose_file_path(ensemble_track_file)['TIME_INDEX'])
-        ens_files = [glob(os.path.join(base_path, f'wofs_ENS_{_t:02d}*'))[0] for _t in range(t-6, t+1)] 
+        ens_files = [glob(os.path.join(base_path, f'wofs_ENS_{_t:02d}*'))[0] for _t in range(t-6, t+1)]
+        
+        svr_file = ens_files[0].replace('ENS', 'SVR') 
+        
         ml_config = self._load_config(ensemble_track_file) 
         
         # See if there are tracks
@@ -497,6 +501,11 @@ class MLDataGenerator:
         # See if there are tracks
         if self.is_there_an_object(storm_objects):
             coord_vars = ["xlat", "xlon", "hgt"]
+            object_props_df = extracter.get_object_properties(storm_objects, intensity_img)
+            labels = object_props_df['label']
+            
+            """
+            FOR AMP. FEATURES.
             try:
                 multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
                         ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=ml_config['ENS_VARS'])
@@ -505,14 +514,10 @@ class MLDataGenerator:
                 print(f"Issue with {ens_files}. Likely a missing variable ('uh_0to2')")
                 return None 
             
+            
             storm_data = xr.Dataset(multiple_datasets_dict)
-            
-            object_props_df = extracter.get_object_properties(storm_objects, intensity_img)
-            labels = object_props_df['label']
-            
             # Get the time-composite intra-storm data 
             storm_data_time_composite = extracter._compute_time_composite(storm_data)
-            
             df_amp = extracter.extract_amplitude_features_from_object( 
                 storm_data_time_composite, 
                 storm_objects, 
@@ -520,12 +525,40 @@ class MLDataGenerator:
                 cond_var=None, 
                 cond_var_thresh=999
             )
+            """
+            
+            # Extract the spatial-based features.
+            # Compute ens. statistics (data is still 2d at this point). 
+            
+            # Load the SVR file
+            ds_svr = open_dataset(svr_file, decode_times=False)
+            try:
+                svr_data = {var: ds_svr[var].values for var in ['cape_sfc', 
+                                                                'cin_sfc', 
+                                                                'cape_mu', 
+                                                                'cin_mu', 
+                                                                'lcl_sfc', 
+                                                                'lcl_mu', 
+                                                               ]}
+            except:
+                print(f"Issue with {svr_file}. Likely due to the missing SRH0to1")
+                ds_env.close()
+                gc.collect()
+                return None 
+            
+            ensemble_data = extracter._compute_ens_stats(svr_data)
+            
+            df_spatial = extracter.extract_spatial_features_from_object( 
+                ensemble_data, 
+                storm_objects, 
+                labels
+            )
 
             # Open existing dataframe
             ml_data_path = ensemble_track_file.replace('ENSEMBLETRACKS', 'MLDATA').replace('.nc', '.feather')
             ml_df = pd.read_feather(ml_data_path)
             
-            new_df = pd.concat([ml_df, df_amp], axis=1)
+            new_df = pd.concat([ml_df, df_spatial], axis=1)
             new_df.reset_index(inplace=True, drop=True) 
         
             # overwrite the existing file. 
@@ -697,7 +730,6 @@ class MLDataGenerator:
                 # Save the EXPLAIN file. 
                 df_subset.to_json(explain_fname)
 
-            
             return [save_df_file, explain_fname] + generated_files
 
         else:
@@ -707,8 +739,13 @@ class MLDataGenerator:
                 prediction_data={}
                 for pair in itertools.product(ml_config['MODEL_NAMES'], ml_config['TARGETS']):
                     model_name, target = pair
-                    prediction_data[f'{model_name}__{target}'] = (['NY', 'NX'],
+                    model_name_str = 'ML' if model_name == 'Average' else model_name
+                    target_str = get_target_str(target)
+                    
+                    for name in ['full', 'trimmed']:
+                        prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'],
                                                           np.zeros((storm_objects.shape), dtype=np.int32))
+                    
                 generated_files.extend(self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, []))
                 ds_env.close()
                 gc.collect()

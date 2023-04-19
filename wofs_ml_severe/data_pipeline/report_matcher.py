@@ -13,17 +13,14 @@ from os.path import basename, dirname
 from datetime import timedelta 
 import gc 
 
-def get_init_time(filename):
-    
-    init_time = basename(dirname(filename))
-    init_date = basename(dirname(dirname(filename)))
-    
-    return init_date+init_time
-                         
 
+def get_init_time(filename):
+    return basename(dirname(filename))
+                   
 def get_valid_time(filename, offset=6, dt=5):
     comps = decompose_file_path(filename)
-    init_time = get_init_time(filename)
+
+    init_time = comps['VALID_DATE']+get_init_time(filename)
 
     valid_duration = int(comps['TIME_INDEX'])*dt - (offset*dt)
     start_time=(pd.to_datetime(init_time)+timedelta(minutes=valid_duration)).strftime('%Y%m%d%H%M')
@@ -53,7 +50,7 @@ class MatchReportsToTracks:
             err_window=self.err_window, 
             )
  
-       ### print(report.start_date, report.end_date) 
+        print(report.start_date, report.end_date) 
 
         report_lsrs = StormReportLoader(
             '/work/mflora/LSRS/lsr_201703010000_202106090000.csv',

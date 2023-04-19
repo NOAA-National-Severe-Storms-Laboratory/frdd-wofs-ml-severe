@@ -11,7 +11,7 @@ def load_ml_model(retro=False, **parameters):
    
     time = parameters.get('time', 'first_hour')
     target = parameters['target']
-    drop_opt = parameters.get('drop_opt', '')
+    file_log = parameters.get('file_log', None)
     model_name = parameters['model_name']
 
     scaler = 'standard' if model_name in ["LogisticRegression", 'NeuralNetwork'] else None
@@ -27,7 +27,13 @@ def load_ml_model(retro=False, **parameters):
     resample = None 
     model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
     
+    if file_log is not None:
+        model_fname = model_fname.replace('.joblib', f'__{file_log}.joblib')
+    
+    print(f'Loading {join(PATH, model_fname)}...')
+    
     model = joblib.load(join(PATH, model_fname))
+    
 
     return model
 

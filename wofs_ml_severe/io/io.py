@@ -95,6 +95,23 @@ def get_numeric_init_time(X):
     
     return Xt 
 
+
+def get_tornado_probsevere(df):
+    """
+    Using the logic from ProbSevere, the tornado targets are based on 
+    1 if tornado is observed and 0 is hail or wind is observed, but no 
+    tornado. 
+    """
+    targets = df[['tornado_severe_0km', 'wind_severe_0km', 'hail_severe_0km']]
+
+    # create new column with desired logic
+    df['tornado_probsevere'] = df.apply(lambda row: 1 if row['tornado_severe_0km'] == 1 else 
+                        (0 if (row['hail_severe_0km'] == 1 or row['wind_severe_0km'] == 1) else np.nan), axis=1)
+
+    df.dropna(subset=['tornado_probsevere'], inplace=True)
+    
+    return df 
+
 def load_ml_data(target_col, 
                  lead_time = 'first_hour', 
                  mode = None, 
@@ -152,36 +169,31 @@ def load_ml_data(target_col,
     
     df = pd.read_feather(file_path)
  
+    if target_col == 'tornado_probsevere':
+        df = get_tornado_probsevere(df)
+
+
     if mode is None:
         print('Only keeping warm season cases for the official training!') 
         df = df.loc[pd.to_datetime(
             df['Run Date'].apply(str)).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
-    else:
-        
-        """
-        if isinstance(target_col, list):
-            target_col = target_col[0]
-            #raise ValueError('At this time, cannot load all severe or all sig severe for the retrospective stuff')
-        
-        if 'sig' in target_col:
-            target = target_col.split('_sig_severe_')[0]
-        else:
-            target = target_col.split('_severe_')[0]
-      
-        target = f'severe_{target}' if target != 'tornado' else target
-        """
-        
-        print(f'For simplicity, loading the dates from the original tornado {mode} dataset...')
-        if lead_time in ['third_hour', 'fourth_hour']:
-            lead_time = 'second_hour'
-        
-        dates = pd.read_feather(join('/work/mflora/ML_DATA/DATA', 
-                                     'original_dates', f'{mode}_{lead_time}_tornado_dates.feather'))
-        
-        original_dates = dates['Dates'].apply(str) 
     
-        df = resample_to_old_dataset(df, original_dates)
+    elif mode == 'training':
+        print(f'Using 2017-2019 cases for training...')
+        # All of 2017-2019. 
+        df = df.loc[pd.to_datetime(
+            df['Run Date'].apply(str)).dt.strftime('%Y').isin(['2017', '2018', '2019'])]
 
+    elif mode == 'testing':
+        # All of 2020-2021 warm season cases. 
+        print(f'Using 2020-2021 cases for testing...')
+        df_warm = df.loc[pd.to_datetime(
+            df['Run Date'].apply(str)).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
+        
+        df = df_warm.loc[pd.to_datetime(
+            df_warm['Run Date'].apply(str)).dt.strftime('%Y').isin(['2020', '2021'])]
+        
+        
     # These are the init times to keep. It ignores init times from 1700-1900 (not inclusive). 
     # These are the standard init times used during the spring cases. 
     init_times = ['0000', '0030', '0100', '0130', '0200', '0230', '0300', '1900', '1930', '2000', '2030', '2100',
@@ -201,6 +213,7 @@ def load_ml_data(target_col,
     # For the conditional features, replace the NaNs with zero
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.reset_index(inplace=True, drop=True) 
+    
     
     features = [f for f in df.columns if 'severe' not in f]
     features = [f for f in features if f not in metadata_features] 
