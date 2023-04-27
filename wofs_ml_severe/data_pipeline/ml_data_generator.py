@@ -354,6 +354,9 @@ class MLDataGenerator:
                 predictions_2d = self.to_2d(predictions, objs, object_labels, shape_2d=storm_objects.shape)
                 prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'], predictions_2d)
             
+            # Add trimmed tracks to save files. 
+            prediction_data[f'trimmed_tracks'] = (['NY', 'NX'], storm_objects_trimmed)
+            
             # Generate the local explainability JSON. 
             if self.explain:
                 if model_name in ['Average', 'LogisticRegression']:
