@@ -430,7 +430,7 @@ class MLDataGenerator:
     
             top_features = [r[0] for r in results]
             # The lists are nested. 
-            top_features = [[f'{f}___{target}' for f in lst] for lst in top_features] 
+            top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
             top_values = np.array([r[1] for r in results])
     
         else:
