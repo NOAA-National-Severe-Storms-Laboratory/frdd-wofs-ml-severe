@@ -33,6 +33,8 @@ sys.path.insert(0, _base_module_path)
 sys.path.insert(0,_base_mp_path)
 import monte_python 
 
+import skexplain
+
 from ..common.multiprocessing_utils import run_parallel, to_iterator
 from ..common.util import decompose_file_path
 
