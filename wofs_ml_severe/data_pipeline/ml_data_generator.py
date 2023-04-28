@@ -33,10 +33,8 @@ sys.path.insert(0, _base_module_path)
 sys.path.insert(0,_base_mp_path)
 import monte_python 
 
-import skexplain
-
 from ..common.multiprocessing_utils import run_parallel, to_iterator
-from ..common.util import decompose_file_path
+from ..common.util import decompose_file_path, get_target_str, is_list, get_time_str, fix_data
 
 from wofs.common import remove_reserved_keys
 from wofs.common.zarr import open_dataset, normalize_filename
@@ -51,111 +49,7 @@ from wofs.post.utils import (
 from ..io.load_ml_models import load_ml_model, load_calibration_model
 from ..io.io import get_numeric_init_time
 from .storm_based_feature_extracter import StormBasedFeatureExtracter
-# Temporary until the ML models are re-trained 
-# with the new naming convention!!!
-from .name_mapper import name_mapping
-
-def is_list(a):
-    return isinstance(a, list)
-
-
-# Temporarily Deprecated until new models are generated
-"""
-def get_time_str(time_index): 
-    hr_size = 12 
-    blend_period = 5
-    hr_rng = np.arange(13)
-    ranges = {'first_hour' : hr_rng, 
-              'second_hour' : hr_rng+hr_size, 
-              'third_hour' : hr_rng+(2*hr_size), 
-              'fourth_hour': hr_rng+(3*hr_size)
-             }
-
-    if time_index in ranges['first_hour']:
-        time = 'first_hour'
-        
-    elif time_index in ranges['second_hour'][:blend_period]:
-        time = ['first_hour', 'second_hour']
-    elif time_index in ranges['second_hour'][blend_period:]:
-        time = 'second_hour'
-        
-    elif time_index in ranges['third_hour'][:blend_period]:
-        time = ['second_hour', 'third_hour']
-    elif time_index in ranges['third_hour'][blend_period:]:
-        time = 'third_hour'
-    elif time_index in ranges['fourth_hour'][:blend_period]:
-         time = ['third_hour', 'fourth_hour']
-    else:
-        time = 'fourth_hour'
-        
-    return time
-"""
-def get_time_str(ts):
-    # 12 is for the 12 timesteps in the first hour (dt=5min)
-    first_hour = 12
-    # blending the first and second hour output for 5 timesteps 
-    blend_period = 4
-    if ts <= first_hour:
-        time = 'first_hour'
-    elif first_hour < ts <= first_hour+blend_period:
-        time = ['first_hour', 'second_hour']
-    else:
-        time = 'second_hour'
-        
-    return time 
-
-def fix_data(X): 
-    #X = X.astype({'Initialization Time' : str})
-    X.replace([np.inf, -np.inf], np.nan, inplace=True)
-    X.reset_index(inplace=True, drop=True)
-    
-    return X 
-
-def just_transforms(model, X):
-    """Applies all transforms to the data, without applying last 
-       estimator.
-
-    Parameters
-    ----------
-    X : iterable
-        Data to predict on. Must fulfill input requirements of first step of
-        the pipeline.
-    """
-    X = fix_data(X)
-    
-    Xt = X
-    for name, transform in model.steps[:-1]:
-        Xt = transform.transform(Xt)
-    return Xt
-
-
-def lr_inputs(model, X):
-    """Compute the product of the model coefficients and processed inputs (e.g., scaling)."""
-    # Scale the inputs. 
-    try:
-        base_est = model.estimators[0].calibrated_classifiers_[0].base_estimator
-    except:
-        base_est = model.calibrated_classifiers_[0].base_estimator
-    
-    Xt = just_transforms(base_est, X)
-    # Get the model coefficients. 
-    coef = base_est.named_steps['model'].coef_[0,:]
-    
-    inputs = coef*Xt
-    
-    return inputs
-
-
-def get_target_str(target):
-    if 'all' in target:
-        return target 
-    else:
-        comps = target.split('_')
-        hazard = comps[0]
-        if 'sig' in target:
-            return f'{hazard}_sig'
-        
-    return hazard
+from .local_explainer import LocalExplainer
 
 
 class MLDataGenerator: 
@@ -377,7 +271,7 @@ class MLDataGenerator:
                 
                 
         return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, explainability_files)
-
+    '''
     def get_top_features(self, inputs, X, features, ind):
         """Using the LR coefficients, determine the top 5 predictors and their values."""
         # Get the absolute values. The onehotencoding on the initialization time
@@ -392,7 +286,7 @@ class MLDataGenerator:
         top_values = X[top_features].values[ind]
 
         return top_features, top_values 
-    
+    '''
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
                                      ensemble_track_file, ml_config, scale='local'
@@ -415,6 +309,7 @@ class MLDataGenerator:
         
         # Round the data. 
         dataframe = dataframe.round(round_dict)
+        X = X.round(round_dict) 
         
         # Save subset of data for the explainability graphics. 
         explain_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 
@@ -424,15 +319,22 @@ class MLDataGenerator:
             # The local explainability works by determining the predictors with the highest val*coef values.
             # This assumption might be neglecting the impact of correlated features and compensating effects
             # within the model. 
-            inputs = lr_inputs(model, X)
+            #inputs = lr_inputs(model, X)
         
-            results = [self.get_top_features(inputs[i,:], dataframe, features, i) for i in range(inputs.shape[0])]
+            #results = [self.get_top_features(inputs[i,:], dataframe, features, i) for i in range(inputs.shape[0])]
     
-            top_features = [r[0] for r in results]
+            #top_features = [r[0] for r in results]
             # The lists are nested. 
-            top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
-            top_values = np.array([r[1] for r in results])
-    
+            #top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
+            #top_values = np.array([r[1] for r in results])
+            
+            
+            # The local explainability uses the input (val*coef) for the logistic regression model. 
+            # It sums together attributions of the log-odds for a feature parent (i.e., all variations on 
+            # mid-level UH).
+            explainer = LocalExplainer(model, X)
+            top_features, top_values = explainer.top_features(target_str, method='coefs')
+            
         else:
             # The global explainability uses a static list of top features, which was determined 
             # by the features with the highest sum total of abs(coefs) for the first and second hour datasets. 
