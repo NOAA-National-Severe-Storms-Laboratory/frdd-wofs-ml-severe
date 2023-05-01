@@ -226,7 +226,7 @@ class MLDataGenerator:
                     
                     # Deprecated due to issues with Initialization time. 
                     # Get the numeric init time 
-                    #X = get_numeric_init_time(X)
+                    X = get_numeric_init_time(X)
                     
                     # Compute the probabilities.
                     predictions.append(model.predict_proba(X)[:,1])
@@ -533,7 +533,8 @@ class MLDataGenerator:
                 
                 for var in temp_vars:
                     # C -> F 
-                    env_data[var] = (1.8 * env_data[var]) + 32.  
+                    if var in env_data.keys():
+                        env_data[var] = (1.8 * env_data[var]) + 32.  
                 
             # Some environmental variables may be in the ENS files
             if len(ml_config['ENV_IN_ENS_VARS']) > 0:

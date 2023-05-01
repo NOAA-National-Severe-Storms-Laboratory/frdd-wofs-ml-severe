@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import random
+import json
 
 
 class IO:
@@ -73,11 +74,42 @@ class IO:
         """Load ML model"""
         pass
         
+def my_train_test_split():
+
+    lead_time = 'first_hour'
+    base_path = '/work/mflora/ML_DATA/DATA'
+    file_path = join(base_path, f'wofs_ml_severe__{lead_time}__reduced_data.feather')
+    df = pd.read_feather(file_path)
+
+    # Get the warm season cases!
+    df = df.loc[pd.to_datetime(
+            df['Run Date'].apply(str)).dt.strftime('%B').isin(['April', 'May', 'June'])]
+
+    run_dates = df['Run Date']
+
+    unique_run_dates = np.unique(run_dates)
+
+    train_dates, test_dates = train_test_split(unique_run_dates, test_size=0.3, random_state=123)
+    train_dates = to_list_of_str(train_dates)
+    test_dates = to_list_of_str(test_dates)
+    
+    data = {'testing_dates' : test_dates, 'training_dates' : train_dates}
+    with open("/work/mflora/ML_DATA/DATA/train_test_case_split.json", "w") as outfile:
+        json.dump(data, outfile)
         
 # Convert New to Old 
 def resample_to_old_dataset(df, original_dates):
-    dates = df['Run Date'].apply(str)
+    dates = df['Run Date'].apply(int)
     return df.loc[dates.isin(original_dates)]
+
+
+def resample_by_date(df, dates):
+    existing_dates = df['Run Date'].apply(str)
+    df_rs = df.loc[existing_dates.isin(dates)]
+    
+    df_rs.reset_index(inplace=True, drop=True)
+    
+    return df_rs
 
 def get_numeric_init_time(X):
     """Convert init time (str) to number of hours after midnight. 
@@ -156,6 +188,9 @@ def load_ml_data(target_col,
     #base_path = '/work/mflora/ML_DATA/MLDATA'
     #file_path = join(base_path, f'wofs_ml_severe__{lead_time}__{mode}_data.feather')
     
+    #TRAIN_YEARS = ['2018', '2019', '2020']
+    #TEST_YEARS = ['2017', '2021']
+    
     if baseline:
         if load_reduced:
             file_path = join(base_path, f'wofs_ml_severe__{lead_time}__baseline_reduced_data.feather')
@@ -172,28 +207,24 @@ def load_ml_data(target_col,
     if target_col == 'tornado_probsevere':
         df = get_tornado_probsevere(df)
 
-
-    if mode is None:
-        print('Only keeping warm season cases for the official training!') 
-        df = df.loc[pd.to_datetime(
-            df['Run Date'].apply(str)).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
+    # Deprecated!!!
+    # Get the warm season cases!
+    #df = df.loc[pd.to_datetime(
+    #        df['Run Date'].apply(str)).dt.strftime('%B').isin(['April', 'May', 'June'])]
+    # Split into training or testing based on year. 
+    # Default the training dataset is loaded. 
+    #years = TRAIN_YEARS if mode in ['training', None] else TEST_YEARS
+    #df = df.loc[pd.to_datetime(
+    #        df['Run Date'].apply(str)).dt.strftime('%Y').isin(years)]
     
-    elif mode == 'training':
-        print(f'Using 2017-2019 cases for training...')
-        # All of 2017-2019. 
-        df = df.loc[pd.to_datetime(
-            df['Run Date'].apply(str)).dt.strftime('%Y').isin(['2017', '2018', '2019'])]
-
-    elif mode == 'testing':
-        # All of 2020-2021 warm season cases. 
-        print(f'Using 2020-2021 cases for testing...')
-        df_warm = df.loc[pd.to_datetime(
-            df['Run Date'].apply(str)).dt.strftime('%B').isin(['March', 'April', 'May', 'June', 'July'])]
-        
-        df = df_warm.loc[pd.to_datetime(
-            df_warm['Run Date'].apply(str)).dt.strftime('%Y').isin(['2020', '2021'])]
-        
-        
+    mode = 'training' if mode is None else mode
+    
+    with open("/work/mflora/ML_DATA/DATA/train_test_case_split.json", "r") as outfile:
+        cases_split = json.load(outfile)
+    
+    these_dates = cases_split[f'{mode}_dates']
+    df = resample_by_date(df, these_dates)
+    
     # These are the init times to keep. It ignores init times from 1700-1900 (not inclusive). 
     # These are the standard init times used during the spring cases. 
     init_times = ['0000', '0030', '0100', '0130', '0200', '0230', '0300', '1900', '1930', '2000', '2030', '2100',
@@ -213,7 +244,6 @@ def load_ml_data(target_col,
     # For the conditional features, replace the NaNs with zero
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.reset_index(inplace=True, drop=True) 
-    
     
     features = [f for f in df.columns if 'severe' not in f]
     features = [f for f in features if f not in metadata_features] 

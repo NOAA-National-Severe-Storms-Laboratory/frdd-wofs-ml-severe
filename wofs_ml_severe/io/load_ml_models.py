@@ -24,7 +24,8 @@ def load_ml_model(retro=False, **parameters):
     
     retro_str = 'retro' if retro else 'realtime'
     
-    resample = None 
+    resample = parameters.get('resample', None) 
+    
     model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
     
     if file_log is not None:
