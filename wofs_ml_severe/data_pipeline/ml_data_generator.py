@@ -653,6 +653,8 @@ class MLDataGenerator:
                     for name in ['full', 'trimmed']:
                         prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'],
                                                           np.zeros((storm_objects.shape), dtype=np.int32))
+                    # Add trimmed tracks to save files. 
+                    prediction_data[f'trimmed_tracks'] = (['NY', 'NX'], np.zeros((storm_objects.shape), dtype=np.int32))
                     
                 generated_files.extend(self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, []))
                 ds_env.close()
