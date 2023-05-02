@@ -271,22 +271,7 @@ class MLDataGenerator:
                 
                 
         return self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, explainability_files)
-    '''
-    def get_top_features(self, inputs, X, features, ind):
-        """Using the LR coefficients, determine the top 5 predictors and their values."""
-        # Get the absolute values. The onehotencoding on the initialization time
-        # adds additional features. To bypass that issue, I've just made it so that 
-        # we are only including non init time features. 
-        abs_inputs = np.absolute(inputs[:])
-        # Sort the values and get the highest values. 
-        sorted_indices = np.argsort(abs_inputs)[::-1]
-        
-        top_features = np.array(features)[sorted_indices][:5]
 
-        top_values = X[top_features].values[ind]
-
-        return top_features, top_values 
-    '''
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
                                      ensemble_track_file, ml_config, scale='local'
@@ -315,20 +300,7 @@ class MLDataGenerator:
         explain_fname = ensemble_track_file.replace('ENSEMBLETRACKS', 
                                                     f'{scale.upper()}EXPLAIN__{target_str}').replace('.nc', '.json')
         
-        if scale == 'local': 
-            # The local explainability works by determining the predictors with the highest val*coef values.
-            # This assumption might be neglecting the impact of correlated features and compensating effects
-            # within the model. 
-            #inputs = lr_inputs(model, X)
-        
-            #results = [self.get_top_features(inputs[i,:], dataframe, features, i) for i in range(inputs.shape[0])]
-    
-            #top_features = [r[0] for r in results]
-            # The lists are nested. 
-            #top_features = [[f'{f}_{target}' for f in lst] for lst in top_features] 
-            #top_values = np.array([r[1] for r in results])
-            
-            
+        if scale == 'local':      
             # The local explainability uses the input (val*coef) for the logistic regression model. 
             # It sums together attributions of the log-odds for a feature parent (i.e., all variations on 
             # mid-level UH).
