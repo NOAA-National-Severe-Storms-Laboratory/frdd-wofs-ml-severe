@@ -280,7 +280,7 @@ class MLDataGenerator:
         target_str = ml_config['TARGET_CONVERTER'].get(target, target)
         
         # Load the round_dict 
-        json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target}.json' )
+        json_file = join(pathlib.Path(__file__).parent.parent.resolve(), 'json', f'min_max_vals_{target_str}.json' )
         
         with open(json_file) as f:
             results = json.load(f)
@@ -290,7 +290,7 @@ class MLDataGenerator:
         # Get the metadata like the object coords. 
         # TODO: Add the ens_prob predictor to get the number of predictors. 
         metadata = dataframe[['label', 'obj_centroid_x', 'obj_centroid_y', 'ens_track_prob']]
-        metadata ['ens_track_prob'] = (metadata ['ens_track_prob']*18).astype(int)
+        metadata ['ens_track_prob'] = (metadata['ens_track_prob']*18).astype(int)
         
         # Round the data. 
         dataframe = dataframe.round(round_dict)
