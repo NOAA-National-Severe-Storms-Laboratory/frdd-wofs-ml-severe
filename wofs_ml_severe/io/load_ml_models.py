@@ -1,41 +1,56 @@
 import joblib, os, warnings
 from os.path import join 
 
-def load_ml_model(retro=False, **parameters):
+def load_ml_model(retro=False,  **parameters):
     """
     Load a saved ML model  
     """
     ml_config = parameters.get('ml_config') 
-
     PATH = ml_config['ML_MODEL_PATH']
+    
+    if not os.path.exists(PATH):
+        # Checks for the path on the cloud
+        # else defaults to the path on the wof-post machines
+        PATH = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
+    
    
     time = parameters.get('time', 'first_hour')
     target = parameters['target']
     file_log = parameters.get('file_log', None)
+    if file_log is None:
+        file_log = ml_config.get('file_log', None)
+    
+    random_state = parameters.get('random_state', 123)
+    
     model_name = parameters['model_name']
+    
+    old_file_format = parameters.get('old_file_format', False)
+    
 
-    scaler = 'standard' if model_name in ["LogisticRegression", 'NeuralNetwork'] else None
+    if old_file_format: 
+        scaler = 'standard' if model_name in ["LogisticRegression", 'NeuralNetwork'] else None
     
-    #if retro:
-        #resample = ml_config['RESAMPLE_DICT'][time][target][model_name]
-    #    resample=None
-    #    model_fname = f'{model_name}_{time}_{target}_{resample}_{scaler}_{drop_opt}.pkl'
-    #else:
+        #if retro:
+            #resample = ml_config['RESAMPLE_DICT'][time][target][model_name]
+        #    resample=None
+        #    model_fname = f'{model_name}_{time}_{target}_{resample}_{scaler}_{drop_opt}.pkl'
+        #else:
     
-    retro_str = 'retro' if retro else 'realtime'
+        retro_str = 'retro' if retro else 'realtime'
     
-    resample = parameters.get('resample', None) 
+        resample = parameters.get('resample', None) 
     
-    model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
+        model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
     
-    if file_log is not None:
-        model_fname = model_fname.replace('.joblib', f'__{file_log}.joblib')
+        if file_log is not None:
+            model_fname = model_fname.replace('.joblib', f'__{file_log}.joblib')
+    
+    else:
+        model_fname = f'{model_name}_{target}_{time}_rs_{random_state}.joblib'
     
     print(f'Loading {join(PATH, model_fname)}...')
-    
     model = joblib.load(join(PATH, model_fname))
     
-
     return model
 
 def load_calibration_model(retro=False, **parameters):
