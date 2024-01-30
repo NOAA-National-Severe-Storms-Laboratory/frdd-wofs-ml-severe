@@ -80,7 +80,7 @@ class MLDataGenerator:
     """
     ### Monte: Removed old inputs 08/24/2022.
     ### Removed retro 18 March 2023 
-    def __init__(self, TEMP=True, debug=False, outdir=None, **kwargs):
+    def __init__(self, TEMP=True, debug=False, outdir=None, explain=True, **kwargs):
         
         self.TEMP = TEMP
         
@@ -88,13 +88,15 @@ class MLDataGenerator:
         self._outdir = outdir
         
         self.ml_config_path = kwargs.get('ml_config_path', None)
+        self.explain=explain
+        
 
     def __call__(self,
                  paths, 
                  n_processors=1, 
                  realtime=True, 
                 outdir=None, 
-                append=False):
+                append=False, old_file_format=True):
         
         """Runs the data generator
         
@@ -128,6 +130,7 @@ class MLDataGenerator:
         self.predict  = predict
         self.explain  = explain
         self.realtime = realtime
+        self.old_file_format = old_file_format
         
         func = self._append if append else self.generate_ml_severe_files
         
@@ -166,6 +169,9 @@ class MLDataGenerator:
     
         ds.attrs = remove_reserved_keys(ds.attrs)
     
+        if ensemble_track_file is None:
+            return ds 
+    
         save_nc_file = ensemble_track_file.replace('ENSEMBLETRACKS', 'MLPROB')
         ###print(f'Saving {save_nc_file}...')
         if self.debug:
@@ -178,7 +184,7 @@ class MLDataGenerator:
     def is_there_an_object(self, storm_objects):   
         return np.max(storm_objects) > 0
 
-    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ensemble_track_file, ml_config, ens_probs):
+    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ml_config, ens_probs, ensemble_track_file=None):
         """
         Produces 2D probabilistic predictions from the ML model and baseline system
         """
@@ -202,6 +208,7 @@ class MLDataGenerator:
                 'drop_opt' : '',
                 'model_name' : model_name,
                 'ml_config' : ml_config,
+                'old_file_format' : self.old_file_format,
             }
             if model_name != 'Baseline':
                 predictions = []
@@ -226,7 +233,8 @@ class MLDataGenerator:
                     
                     # Deprecated due to issues with Initialization time. 
                     # Get the numeric init time 
-                    X = get_numeric_init_time(X)
+                    if 'Initialization Time' in X.columns:
+                        X = get_numeric_init_time(X)
                     
                     # Compute the probabilities.
                     predictions.append(model.predict_proba(X)[:,1])
@@ -332,7 +340,7 @@ class MLDataGenerator:
             ml_config_path = self.ml_config_path
         else:
             path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
-            ml_config_path = join(path, 'ml_config_realtime.yml')
+            ml_config_path = join(path, 'default_ml_config.yml')
 
         print(f'Loading config file: {ml_config_path}....')    
             
@@ -575,8 +583,8 @@ class MLDataGenerator:
                 time_index = int(env_file.split('_')[-4])
                 time = get_time_str(time_index)
                 
-                mlprob_file = self.get_predictions(time, dataframe, storm_objects, ds_subset, 
-                                              ensemble_track_file, ml_config, intensity_img)
+                mlprob_file = self.get_predictions(time, dataframe, storm_objects, ds_subset, ml_config, 
+                                                   intensity_img, ensemble_track_file)
                 generated_files.extend(mlprob_file)
             
             ensemble_track_ds.close()
