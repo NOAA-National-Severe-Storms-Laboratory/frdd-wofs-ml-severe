@@ -5,15 +5,15 @@ def load_ml_model(retro=False,  **parameters):
     """
     Load a saved ML model  
     """
-    ml_config = parameters.get('ml_config') 
-    PATH = ml_config['ML_MODEL_PATH']
-    
-    if not os.path.exists(PATH):
-        # Checks for the path on the cloud
-        # else defaults to the path on the wof-post machines
-        PATH = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
-    
-   
+    path = parameters.get('model_path', '/work/mflora/ML_DATA/OPERATIONAL_MODELS')
+    ml_config = parameters.get('ml_config', {})
+    if path is None:
+        path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
+        
+    if not os.path.exists(path):
+        print(f"{path} does not exist! Reverting to /work/mflora/ML_DATA/OPERATIONAL_MODELS ")
+        path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
+
     time = parameters.get('time', 'first_hour')
     target = parameters['target']
     file_log = parameters.get('file_log', None)
@@ -48,8 +48,8 @@ def load_ml_model(retro=False,  **parameters):
     else:
         model_fname = f'{model_name}_{target}_{time}_rs_{random_state}.joblib'
     
-    print(f'Loading {join(PATH, model_fname)}...')
-    model = joblib.load(join(PATH, model_fname))
+    print(f'Loading {join(path, model_fname)}...')
+    model = joblib.load(join(path, model_fname))
     
     return model
 
