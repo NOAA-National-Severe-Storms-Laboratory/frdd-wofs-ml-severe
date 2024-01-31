@@ -80,7 +80,8 @@ class MLDataGenerator:
     """
     ### Monte: Removed old inputs 08/24/2022.
     ### Removed retro 18 March 2023 
-    def __init__(self, TEMP=True, debug=False, outdir=None, explain=True, **kwargs):
+    def __init__(self, TEMP=True, debug=False, outdir=None, 
+                 explain=True, old_file_format=True, model_path=None, **kwargs):
         
         self.TEMP = TEMP
         
@@ -89,7 +90,22 @@ class MLDataGenerator:
         
         self.ml_config_path = kwargs.get('ml_config_path', None)
         self.explain=explain
-        
+        self.old_file_format=old_file_format
+        self.model_path = model_path
+    
+    
+    def _load_config(self, path_to_summary_file):
+        """Loads the YAML config file for the ML dataset"""
+        if self.ml_config_path is None:
+            path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
+            ml_config_path = join(path, 'default_ml_config.yml')
+        else:
+            ml_config_path = self.ml_config_path
+
+        print(f'Loading config file: {ml_config_path}....')    
+            
+        return load_yaml(ml_config_path)
+    
 
     def __call__(self,
                  paths, 
@@ -209,6 +225,7 @@ class MLDataGenerator:
                 'model_name' : model_name,
                 'ml_config' : ml_config,
                 'old_file_format' : self.old_file_format,
+                'model_path' : self.model_path
             }
             if model_name != 'Baseline':
                 predictions = []
@@ -334,18 +351,6 @@ class MLDataGenerator:
     
         return explain_fname
 
-    def _load_config(self, path_to_summary_file):
-        """Loads the YAML config file for the ML dataset"""
-        if self.ml_config_path is not None:
-            ml_config_path = self.ml_config_path
-        else:
-            path = join(pathlib.Path(__file__).parent.parent.resolve(), 'conf')
-            ml_config_path = join(path, 'default_ml_config.yml')
-
-        print(f'Loading config file: {ml_config_path}....')    
-            
-        return load_yaml(ml_config_path)
-    
     def decompose_path(self, path):
         """Get the Run Date and Initialization time from the file path"""
         outer_path = dirname(path)
@@ -646,21 +651,4 @@ class MLDataGenerator:
         return generated_files
     
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--indir", type=str)
-    parser.add_argument("-n", "--n_processors", type=float)
-    parser.add_argument("--dt", type=int)
-    parser.add_argument("--nt", type=int)
-    parser.add_argument("--duration", type=int)
-    parser.add_argument("--runtype", type=str)
-    parser.add_argument("--config", type=str)
-
-    args = parser.parse_args()  
-    
-    mlops = MLOps(indir=args.indir, 
-                  dt=args.dt, 
-                  nt=args.nt, 
-                  ml_config_path=args.config) 
-    mlops(args.n_processors, args.runtype)
     
