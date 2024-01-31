@@ -44,7 +44,7 @@ setup(
         'xgboost==1.7.1',
         'imbalanced-learn==0.10.1',
     ],
-    package_data={'wofs_ml_severe' : ['conf/ml_config_2017.yml', 
+    package_data={'wofs_ml_severe' : ['conf/default_ml_config.yml', 'conf/ml_config_2017.yml', 
                                       'conf/ml_config_2018-19.yml', 
                                       'conf/ml_config_2020-current.yml', 
                                       'conf/ml_config_realtime.yml', 
