@@ -1,5 +1,8 @@
-#import shap
-#import skexplain 
+import shap
+#import sys, os
+#sys.path.insert(0, '/home/monte.flora/python_packages/scikit-explain')
+
+import skexplain 
 import pandas as pd 
 import numpy as np 
 
@@ -28,17 +31,19 @@ class LocalExplainer:
         if method == 'coefs':
             inputs = self.lr_inputs()
             attrs = self.to_dataframe(inputs, self._features)
+            func = np.product
 
         elif method == 'shap':
             print('Using the SHAP method...')
             contrib_ds = self._shap()
             attrs = pd.DataFrame(contrib_ds['shap_values__Model'].values, 
                          columns = contrib_ds.attrs['features'])
+            func = np.sum
         else:
             raise ValueError('method must be "shap" or "coefs!"')
             
         n_examples = attrs.shape[0]   
-        results = [self._sort_attributions(attrs.iloc[i,:], i) for i in range(n_examples)]
+        results = [self._sort_attributions(func, attrs.iloc[i,:], i) for i in range(n_examples)]
     
         top_features = [r[0] for r in results]
         # The lists are nested. 
@@ -81,7 +86,7 @@ class LocalExplainer:
         # Get the model coefficients. 
         coef = base_est.named_steps['model'].coef_[0,:]
     
-        inputs = coef*Xt
+        inputs = np.exp(coef*Xt)
     
         return inputs
 
@@ -94,7 +99,7 @@ class LocalExplainer:
             else:
                 return f 
 
-    def _sort_attributions(self, attributions, ind):
+    def _sort_attributions(self, func, attributions, ind):
     
         """Get the top features and their values for a single example. Sort the features 
         based on their attributions. """
@@ -107,7 +112,7 @@ class LocalExplainer:
             these_features = [f for f in self._features if this_feature in f ]
         
             _unique_features.append(self.get_single_feature(these_features))
-            val = np.sum(attributions[these_features].values)
+            val = func(attributions[these_features].values)
     
             unique_attrs[i] = val
     
@@ -127,11 +132,12 @@ class LocalExplainer:
                                                     clustering="correlation"), 
                                                    'algorithm' : 'permutation'}
 
-        try:
-            base_est = self._model.estimators[0].calibrated_classifiers_[0].base_estimator
-        except:
-            base_est = self._model.calibrated_classifiers_[0].base_estimator
+        #try:
+        #    base_est = self._model.estimators[0].calibrated_classifiers_[0].base_estimator
+        #except:
+        #    base_est = self._model.calibrated_classifiers_[0].base_estimator
         
+        base_est = self._model
         
         explainer = skexplain.ExplainToolkit(('Model', base_est), X=self._X)
         contrib_ds = explainer.local_attributions(method='shap', 

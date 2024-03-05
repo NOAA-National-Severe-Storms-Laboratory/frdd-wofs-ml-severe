@@ -1,6 +1,8 @@
 #======================================================
 # Generates the ML dataset from the WoFS summary files
-# and ensemble storm tracks.
+# and ensemble storm tracks. This script is used in 
+# real-time to generate the data from the WoFS-ML-Severe 
+# products. 
 # 
 # Author: Montgomery Flora (Git username : monte-flora)
 # Email : monte.flora@noaa.gov 
@@ -24,9 +26,10 @@ from glob import glob
 import numpy as np
 import xarray as xr
 import pandas as pd
+import joblib
 
 # WoFS modules 
-_base_module_path = '/home/monte.flora/python_packages/WoF_post'
+_base_module_path = '/home/monte.flora/python_packages/frdd-wofs-post'
 _base_mp_path = '/home/monte.flora/python_packages/MontePython'
 import sys
 sys.path.insert(0, _base_module_path)
@@ -46,10 +49,20 @@ from wofs.post.utils import (
 )
 
 # Personal Modules 
-from ..io.load_ml_models import load_ml_model, load_calibration_model
+from ..io.load_ml_models import load_ml_model, load_calibration_model, load_ml_models_2024
 from ..io.io import get_numeric_init_time
 from .storm_based_feature_extracter import StormBasedFeatureExtracter
 from .local_explainer import LocalExplainer
+
+
+def simplify_target(target_str): 
+    translate_dict = {'severe_mesh' : 'hail',
+                      'severe_wind' : 'wind', 
+                      'severe_torn' : 'tornado', 
+                      'any_severe' : 'all_severe',
+                      'any_sig_severe' : 'all_sig_severe'
+                     }
+    return translate_dict.get(target_str, target_str)
 
 
 class MLDataGenerator: 
@@ -81,7 +94,7 @@ class MLDataGenerator:
     ### Monte: Removed old inputs 08/24/2022.
     ### Removed retro 18 March 2023 
     def __init__(self, TEMP=True, debug=False, outdir=None, 
-                 explain=True, old_file_format=True, model_path=None, **kwargs):
+                 explain=True, model_path=None, **kwargs):
         
         self.TEMP = TEMP
         
@@ -90,7 +103,6 @@ class MLDataGenerator:
         
         self.ml_config_path = kwargs.get('ml_config_path', None)
         self.explain=explain
-        self.old_file_format=old_file_format
         self.model_path = model_path
     
     
@@ -217,80 +229,51 @@ class MLDataGenerator:
         qcer = monte_python.QualityControler()
         storm_objects_trimmed, _ = qcer.quality_control(ens_probs, storm_objects, object_props, qc_params)
         
-        for pair in itertools.product(ml_config['MODEL_NAMES'], ml_config['TARGETS']):
-            model_name, target = pair
-            parameters = {
-                'target' : target,
-                'drop_opt' : '',
-                'model_name' : model_name,
-                'ml_config' : ml_config,
-                'old_file_format' : self.old_file_format,
-                'model_path' : self.model_path
-            }
-            if model_name != 'Baseline':
-                predictions = []
-                for time in times: 
-                    parameters['time'] = time
-                    model_dict = load_ml_model(**parameters)
-                    model = model_dict['model']
-                    try: 
-                        features = model_dict['features']
-                    except:
-                        features = list(model_dict['X'].columns)
-            
-                    # Deprecated 17 March 2023. New models no longer need the feature name correction. 
-                    #if self.TEMP:
-                    #    corrected_feature_names = name_mapping(features)
-                    #    new_features = [corrected_feature_names.get(f,f) for f in features]
-                    #    X = dataframe[new_features]
-                    #else:
-                        
-                    X = dataframe[features] 
-                    X = fix_data(X)
-                    
-                    # Deprecated due to issues with Initialization time. 
-                    # Get the numeric init time 
-                    if 'Initialization Time' in X.columns:
-                        X = get_numeric_init_time(X)
-                    
-                    # Compute the probabilities.
-                    predictions.append(model.predict_proba(X)[:,1])
-            else:
-                predictions = []
-                for time in times: 
-                    parameters['time'] = time
-                
-                    iso_reg = load_calibration_model(**parameters)
-                    raw_predictions = dataframe[ml_config['BASELINE_VARS'][target]].values
-                    predictions.append(iso_reg.predict(raw_predictions))
+        ml_model_path = os.path.join(self.model_path, ml_config['MODEL_NAMES'][-1])
+        _, _, features = load_ml_models_2024(ml_model_path, return_features=True)
         
-            # Average together predictions during the transition period.     
-            predictions = np.mean(predictions, axis=0) 
-            
-            model_name_str = 'ML' if model_name == 'Average' else model_name
-            target_str = get_target_str(target)
+        X = dataframe[features] 
+        X = fix_data(X)
+        # Deprecated due to issues with Initialization time. 
+        # Get the numeric init time 
+        if 'Initialization Time' in X.columns:
+            X = get_numeric_init_time(X)
+        
+        for model_fname in ml_config['MODEL_NAMES']:
+            model, target = load_ml_models_2024(os.path.join(self.model_path, model_fname))
+            target = simplify_target(target)
+
+            # Compute the probabilities or hail size.
+            # TODO: refactor for the hail regression model.
+            if 'Regressor' in model_fname:
+                predictions = model.predict(X)
+                # Temporary fix for negative hail sizes! 
+                predictions[predictions<=0.0] = 0.0
+                hail_size = predictions
+            else:
+                predictions = model.predict_proba(X)[:,1]
             
             # Create the full and trimmed tracks and save them to the dataset. 
             for name, objs in zip(['full', 'trimmed'], [storm_objects,storm_objects_trimmed]):
                 predictions_2d = self.to_2d(predictions, objs, object_labels, shape_2d=storm_objects.shape)
-                prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'], predictions_2d)
+                prediction_data[f'ML__{target}__{name}'] = (['NY', 'NX'], predictions_2d)
             
             # Add trimmed tracks to save files. 
             prediction_data[f'trimmed_tracks'] = (['NY', 'NX'], storm_objects_trimmed)
             
             # Generate the local explainability JSON. 
             if self.explain:
-                if model_name in ['Average', 'LogisticRegression']:
-                    explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
-                                     ensemble_track_file, ml_config, scale='local'                               
+                explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
+                                     ensemble_track_file, ml_config, hail_size=hail_size, scale='local'                               
                                 )    
-                    explainability_files.append(explainfile) 
+                explainability_files.append(explainfile) 
                 
                 # Generate the global explainability JSON. 
                 global_explainfile = self.generate_explainability_json(model, 
                                                                               X, target, 
                                                                               dataframe, features, 
                                                                              ensemble_track_file, ml_config,
+                                                                             hail_size=hail_size, 
                                                                              scale = 'global')    
                 explainability_files.append(global_explainfile)     
                 
@@ -299,7 +282,7 @@ class MLDataGenerator:
 
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
-                                     ensemble_track_file, ml_config, scale='local'
+                                     ensemble_track_file, ml_config, hail_size=None, scale='local'
                                 ): 
         """Generate the local or global explainability JSON file"""
         target_str = ml_config['TARGET_CONVERTER'].get(target, target)
@@ -312,11 +295,11 @@ class MLDataGenerator:
     
         round_dict = {f : results[f]['round_int'] for f in features}
     
-        # Get the metadata like the object coords. 
-        # TODO: Add the ens_prob predictor to get the number of predictors. 
+        # Get the metadata like the object coords. Also, adding additional data. 
         metadata = dataframe[['label', 'obj_centroid_x', 'obj_centroid_y', 'ens_track_prob']]
-        metadata ['ens_track_prob'] = (metadata['ens_track_prob']*18).astype(int)
-        
+        metadata['ens_track_prob'] = (metadata['ens_track_prob']*18).astype(int)
+        metadata['hail_size'] = np.round(hail_size, 2) 
+
         # Round the data. 
         dataframe = dataframe.round(round_dict)
         X = X.round(round_dict) 
@@ -328,15 +311,18 @@ class MLDataGenerator:
         if scale == 'local':      
             # The local explainability uses the input (val*coef) for the logistic regression model. 
             # It sums together attributions of the log-odds for a feature parent (i.e., all variations on 
-            # mid-level UH).
-            explainer = LocalExplainer(model, X)
-            top_features, top_values = explainer.top_features(target_str, method='coefs')
+            # mid-level UH). or use the SHAP method to determine the top features for a particular example. 
+            X_train = pd.read_feather(os.path.join(ml_config['ML_MODEL_PATH'], 'shap_samples.feather'))
+            X_train = X_train[X.columns]
+            
+            explainer = LocalExplainer(model, X, X_train=X_train)
+            top_features, top_values = explainer.top_features(target_str, method='shap')
             
         else:
             # The global explainability uses a static list of top features, which was determined 
             # by the features with the highest sum total of abs(coefs) for the first and second hour datasets. 
             n_examples = len(dataframe)
-            top_features_ = list(ml_config['TOP_FEATURES'][target_str])
+            top_features_ = list(ml_config['TOP_FEATURES'])
             top_values = dataframe[top_features_].values 
             top_features = [list(top_features_) for _ in range(n_examples)]
             
@@ -395,29 +381,6 @@ class MLDataGenerator:
             coord_vars = ["xlat", "xlon", "hgt"]
             object_props_df = extracter.get_object_properties(storm_objects, intensity_img)
             labels = object_props_df['label']
-            
-            """
-            FOR AMP. FEATURES.
-            try:
-                multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
-                        ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=ml_config['ENS_VARS'])
-            except: 
-                gc.collect()
-                print(f"Issue with {ens_files}. Likely a missing variable ('uh_0to2')")
-                return None 
-            
-            
-            storm_data = xr.Dataset(multiple_datasets_dict)
-            # Get the time-composite intra-storm data 
-            storm_data_time_composite = extracter._compute_time_composite(storm_data)
-            df_amp = extracter.extract_amplitude_features_from_object( 
-                storm_data_time_composite, 
-                storm_objects, 
-                labels, 
-                cond_var=None, 
-                cond_var_thresh=999
-            )
-            """
             
             # Extract the spatial-based features.
             # Compute ens. statistics (data is still 2d at this point). 
