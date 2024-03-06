@@ -1,17 +1,42 @@
 import joblib, os, warnings
 from os.path import join 
 
+from ..fit.ml_trainer import MLTrainer
+from .load_tf_model import load_tf_model
+
+def load_ml_models_2024(ml_model_path, return_features=False): 
+
+    if ml_model_path.endswith('.joblib'): 
+        model_dict = joblib.load(ml_model_path)
+        model, features = model_dict['model'], model_dict['features'] 
+        # fname format : 'WeightedAvgClassifer__any_severe.joblib' 
+        model_fname = os.path.basename(ml_model_path)
+        fname_no_ext = model_fname.replace('.joblib', '') 
+        _, target = fname_no_ext.split('__')
+
+        if return_features:
+            return model, target, features 
+        else:
+            return model, target 
+    
+    else:
+        # Loading the regression model. 
+        model = load_tf_model(ml_model_path)
+        
+        return model, 'hail_size'
+        
+        
 def load_ml_model(retro=False,  **parameters):
     """
     Load a saved ML model  
     """
-    path = parameters.get('model_path', '/work/mflora/ML_DATA/OPERATIONAL_MODELS')
+    path = parameters.get('model_path', '/work/mflora/ML_DATA/OPERATIONAL_MODELS_2023')
     ml_config = parameters.get('ml_config', {})
     if path is None:
-        path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
+        path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS_2023'
         
     if not os.path.exists(path):
-        print(f"{path} does not exist! Reverting to /work/mflora/ML_DATA/OPERATIONAL_MODELS ")
+        print(f"{path} does not exist! Reverting to /work/mflora/ML_DATA/OPERATIONAL_MODELS_2023 ")
         path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
 
     time = parameters.get('time', 'first_hour')
