@@ -31,9 +31,9 @@ import joblib
 # WoFS modules 
 _base_module_path = '/home/monte.flora/python_packages/frdd-wofs-post'
 _base_mp_path = '/home/monte.flora/python_packages/MontePython'
-import sys
-sys.path.insert(0, _base_module_path)
-sys.path.insert(0,_base_mp_path)
+#import sys
+#sys.path.insert(0, _base_module_path)
+#sys.path.insert(0,_base_mp_path)
 import monte_python 
 
 from ..common.multiprocessing_utils import run_parallel, to_iterator
