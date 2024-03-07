@@ -49,7 +49,7 @@ setup(
                                       'conf/ml_config_2020-current.yml', 
                                       'conf/ml_config_realtime.yml', 
                                       'conf/ml_config_retro.yml', 'json/*']},
-    packages=['wofs_ml_severe', 'wofs_ml_severe.common', 'wofs_ml_severe.data_pipeline', 'wofs_ml_severe.io', 
+    packages=['wofs_ml_severe', 'wofs_ml_severe.fit', 'wofs_ml_severe.common', 'wofs_ml_severe.data_pipeline', 'wofs_ml_severe.io', 
               'wofs_ml_severe.evaluate', 'wofs_ml_severe.conf'],  # Required
     python_requires='>=3.8, <4',
     package_dir={'wofs_ml_severe': 'wofs_ml_severe'},

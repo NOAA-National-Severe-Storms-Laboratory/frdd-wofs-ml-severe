@@ -45,6 +45,7 @@ class StormReportLoader:
         
         self.forecast_length = forecast_length
         self.err_window = err_window
+        self.return_only_points=False
         
         if report_type not in ['NOAA', 'IOWA']:
             raise ValueError(f'{report_type} is not valid!')
@@ -63,9 +64,9 @@ class StormReportLoader:
             
         else:
             DTYPE = {'VALID': np.int64, 'LAT':np.float64, 'LON':np.float64, 
-                     'MAG':np.float64, 'EVENT_TYPE':object, 'TOR_F_SCALE' :object}
+                     'MAG':np.float64, 'EVENT_TYPE':object, 'TOR_F_SCALE' :object}#, 'prob_of_severe_wind':np.float64}
             
-            COLS = ['VALID', 'LAT', 'LON', 'MAG', 'EVENT_TYPE', 'TOR_F_SCALE']
+            COLS = ['VALID', 'LAT', 'LON', 'MAG', 'EVENT_TYPE', 'TOR_F_SCALE']#, 'prob_of_severe_wind']
             self._EVENT_TYPE = 'EVENT_TYPE'
             self._HAIL_CATS = 'Hail'
             self._WIND_CATS = 'Thunderstorm Wind'
@@ -79,35 +80,73 @@ class StormReportLoader:
         # Get the time window for the reports.
         self.get_time_window(initial_time)
 
-    def __call__(self, ):
+    def __call__(self, return_only_points=True ):
         """ Get lats/lons for each hazard type """
         hazards = ['tornado', 'hail', 'wind']
+        self.return_only_points=True
         lsrs = {h : np.array(getattr(self, f'get_{h}_reports')()).T for h in hazards}
                  
         return lsrs
     
     
-    def get_points(self, dataset, magnitude='both', hazard = 'all'):
+    def get_filtered_wind_reports(self, dataset, magnitude='both', to_xy=True, prob_thresholds=np.arange(0.05, 0.8, 0.1)):
         if magnitude == 'both':
             mag_iterator = ['severe', 'sig_severe']
         else:
             mag_iterator = [magnitude]
+            
+        points = {}
+        for magnitude, thresh in itertools.product(mag_iterator, prob_thresholds):
+            output = self.get_wind_reports(magnitude, thresh)
+            if to_xy:
+                lsr_x, lsr_y, indices =  self.to_xy(dataset, lats=output[0], lons=output[1], return_indices=True)
+            else:
+                lsr_x, lsr_y = output[1], output[0]
+                
+            lsr_points = list(zip(lsr_x, lsr_y))
+           
+            points[f'wind_{magnitude}_prob>{thresh:.2f}'] = lsr_points
 
+        return points    
+            
+    def get_points(self, dataset, magnitude='both', hazard = 'all', to_xy=True, return_df=False):
+        if magnitude == 'both':
+            mag_iterator = ['severe', 'sig_severe']
+        else:
+            mag_iterator = [magnitude]
+            
         hazard_iterator = ['tornado', 'hail', 'wind'] if hazard=='all' else [hazard]           
         
         points = {}
+        dfs = {}
         
         for magnitude, hazard in itertools.product(mag_iterator, hazard_iterator):
-            ll = getattr(self, f'get_{hazard}_reports')(magnitude)
-            lsr_x, lsr_y =  self.to_xy(dataset, lats=ll[0], lons=ll[1])
-            lsr_points = list(zip(lsr_x, lsr_y))
+            output = getattr(self, f'get_{hazard}_reports')(magnitude, return_df)
+            
+            if to_xy:
+                vals = output[2]
+                lsr_x, lsr_y, indices =  self.to_xy(dataset, lats=output[0], lons=output[1], return_indices=True)
+            else:
+                lsr_x, lsr_y, vals = output[1], output[0], output[2]
+                
+            lsr_points = list(zip(lsr_x, lsr_y, vals))
+            
+            if return_df:
+                df = output[-1]
+                df_sub = df.iloc[indices]
+                df_sub.reset_index(inplace=True, drop=True)
+                dfs[f'{hazard}_{magnitude}'] = df_sub
             
             points[f'{hazard}_{magnitude}'] = lsr_points
+  
+        if return_df:
+            return points, dfs
+        
         
         return points
         
     
-    def to_grid(self, dataset, fname=None, magnitude='both', hazard = 'all', size=3):
+    def to_grid(self, dataset, points=None, df=None, fname=None, magnitude='both', hazard = 'all', size=3):
         """
         Convert storm reports to a grid. Applies a maximum filter of 3 grid points.
         For a 3 km grid spacing, assumes that reports are potentially valid over a
@@ -122,7 +161,9 @@ class StormReportLoader:
             hazards, string 
 
         """
-        points = self.get_points(dataset, magnitude, hazard)
+        if points is None:
+            points = self.get_points(dataset, magnitude, hazard)
+        
         data ={}
         
         try:
@@ -149,6 +190,7 @@ class StormReportLoader:
         Convert points to gridded data
         """
         #xy_pair = [ (x,y) for x,y in xy_pair if x < nx-1 and y < nx-1 and x > 0 and y > 0 ]
+        
         gridded_lsr = np.zeros((nx, nx), dtype=np.int8)
         for i, pair in enumerate(xy_pair):
             gridded_lsr[pair[0],pair[1]] = i+1
@@ -187,7 +229,7 @@ class StormReportLoader:
         return (self.df[etype].isin(names)) 
     
     
-    def get_hail_reports(self, magnitude='severe'): 
+    def get_hail_reports(self, magnitude='severe', return_df=False): 
         '''
         Load hail reports. 
 
@@ -203,17 +245,27 @@ class StormReportLoader:
 
         '''
         magnitude_dict = {'severe' : 1.0,
-                           'sig_severe' : 2.0
+                           'sig_severe' : 2.0,
+                           'any' : 0.0
                           }
-
+        
         mag_mask = (self.df.MAG >= magnitude_dict[magnitude])
         etype = self._EVENT_TYPE
         event_type_mask = self._get_event_type(etype, self._HAIL_CATS) #(self.df[etype] == self._HAIL_CATS) 
-        severe_hail_reports = self.df.loc[self.time_mask & mag_mask & event_type_mask] 
+        hail_reports = self.df.loc[self.time_mask & mag_mask & event_type_mask] 
 
-        return ( severe_hail_reports['LAT'].values, severe_hail_reports['LON'].values)
+        #df = severe_hail_reports[['MAG']].copy()
+        #df.rename(columns={'MAG': 'hail_mag'}, inplace=True)
+                       
+        if return_df:
+            return hail_reports['LAT'].values, hail_reports['LON'].values, df 
+        
+        if self.return_only_points:
+            return hail_reports['LAT'].values, hail_reports['LON'].values
+        else:
+            return (hail_reports['LAT'].values, hail_reports['LON'].values, hail_reports['MAG'].values)
 
-    def get_tornado_reports(self, magnitude='severe'):
+    def get_tornado_reports(self, magnitude='severe', return_df=False):
         '''
         Load the tornado reports.
 
@@ -243,10 +295,18 @@ class StormReportLoader:
             total_masks = self.time_mask & event_type_mask 
 
         tornado_reports = self.df.loc[total_masks]
+
+        if return_df:
+            df = tornado_reports[['TOR_F_SCALE']].copy()
+            df.rename(columns={'TOR_F_SCALE': 'torn_mag'}, inplace=True)
+            return tornado_reports['LAT'].values, tornado_reports['LON'].values, df 
         
-        return (tornado_reports['LAT'].values, tornado_reports['LON'].values)       
+        if self.return_only_points:
+            return tornado_reports['LAT'].values, tornado_reports['LON'].values
+        else:
+            return (tornado_reports['LAT'].values, tornado_reports['LON'].values, tornado_reports['TOR_F_SCALE'].values)       
    
-    def get_wind_reports(self, magnitude='severe'):
+    def get_wind_reports(self, magnitude='severe', prob_thresh=None, return_df=False):
         '''
         Load the wind reports.
 
@@ -261,7 +321,8 @@ class StormReportLoader:
             lats, lons
         '''
         magnitude_dict = {'severe' : 50.0, 
-                          'sig_severe' : 65.0
+                          'sig_severe' : 65.0,
+                          'any' : 0.0
                          }
 
         etype = self._EVENT_TYPE 
@@ -270,17 +331,32 @@ class StormReportLoader:
         dfc = self.df.copy()
         
         # Add a temp magnitude for wind damage reports
-        if etype == 'TYPETEXT':
+        if etype == 'TYPETEXT' and magnitude_dict[magnitude] != 'any':
             types = [t for t in self._WIND_CATS if t.split(' ')[-1].upper() == 'DMG']
             inds = self.df['TYPETEXT'].isin(types)==True
             dfc.loc[inds, 'MAG'] = 55.0
         
         mag_mask = (dfc.MAG >= magnitude_dict[magnitude])
+        #if prob_thresh is not None:
+            # Filter the severe wind reports by the probability generated by Lizzy Tirone's ML model. 
+        #    thresh_mask = (dfc.prob_of_severe_wind >= prob_thresh)
+        #    wind_reports = dfc.loc[self.time_mask & mag_mask & event_type_mask & thresh_mask]
+        #else:
         wind_reports = dfc.loc[self.time_mask & mag_mask & event_type_mask]
 
-        return (wind_reports['LAT'].values, wind_reports['LON'].values) 
+        #df = wind_reports[['prob_of_severe_wind', 'MAG']].copy()
+        
+        #df.rename(columns={'MAG': 'wind_mag'}, inplace=True)
+        
+        if return_df:
+            return wind_reports['LAT'].values, wind_reports['LON'].values, df
+        
+        if self.return_only_points:
+            return wind_reports['LAT'].values, wind_reports['LON'].values
+        else:
+            return (wind_reports['LAT'].values, wind_reports['LON'].values, wind_reports['MAG'].values) 
 
-    def to_xy(self, ds, lats, lons):
+    def to_xy(self, ds, lats, lons, return_indices=True):
         """Uses a KD-tree approach to determine, which i,j index an
         lat/lon coordiante pair is closest to. Used to map storm reports to 
         the WoFS domain"""
@@ -303,9 +379,10 @@ class StormReportLoader:
         lons_lats_vect = np.column_stack((lons_vect, lats_vect)) # Reshape coordinates
         polygon = Polygon(lons_lats_vect) # create polygon
         
-        good_pairs = [(lon, lat) for lon, lat in zip(lons, lats) if polygon.contains(Point(lon, lat))]
-        lons_within = [pair[0] for pair in good_pairs]
-        lats_within = [pair[1] for pair in good_pairs]
+        good_indices = [i for i, (lon, lat) in enumerate(zip(lons, lats)) if polygon.contains(Point(lon, lat))]
+        
+        lons_within = [lons[i] for i in good_indices]
+        lats_within = [lats[i] for i in good_indices]
         
         grid = pyresample.geometry.GridDefinition(lats=wofs_lat, lons=wofs_lon)
         swath = pyresample.geometry.SwathDefinition(lons=lons_within, lats=lats_within)
@@ -323,5 +400,5 @@ class StormReportLoader:
         # the 2D grid indices:
         x,y = np.unravel_index(index_array, grid.shape)
 
-        return x,y 
+        return x,y, good_indices
 

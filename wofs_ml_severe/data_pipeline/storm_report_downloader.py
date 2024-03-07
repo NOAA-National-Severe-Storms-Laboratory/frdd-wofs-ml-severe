@@ -108,7 +108,7 @@ class StormReportDownloader:
          'MAG':np.float64, 'EVENT_TYPE':object, 'TOR_F_SCALE' :object}
             
         COLS = ['BEGIN_YEARMONTH', 'BEGIN_DAY', 'BEGIN_TIME', 
-        'BEGIN_LAT', 'BEGIN_LON', 'MAGNITUDE', 'EVENT_TYPE', 'TOR_F_SCALE', 'CZ_TIMEZONE']
+        'BEGIN_LAT', 'BEGIN_LON', 'MAGNITUDE', 'EVENT_TYPE', 'TOR_F_SCALE', 'CZ_TIMEZONE', 'EVENT_ID']
 
         dfs = []
         for path in paths:
