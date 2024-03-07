@@ -22,16 +22,18 @@ import xarray as xr
 import numpy as np 
 from skimage.measure import regionprops
 from tqdm import tqdm 
+import random
 
 # Personal Modules
 from ..common.emailer import Emailer
 from ..common.multiprocessing_utils import run_parallel, to_iterator
 from ..common.util import decompose_file_path, save_dataset
-from ..io.io import load_ml_data
+from ..io.io import MLDataLoader
 
 from .ensemble_track_segmentation import generate_ensemble_track_file
 from .ml_data_generator import MLDataGenerator
-from .report_matcher import MatchReportsToTracks
+from .report_matcher import MatchToTracks
+from .concatenator import Concatenator
 
 class Logger:
     def __init__(self, filename='data_pipeline.log'):
@@ -76,21 +78,36 @@ class MLDataPipeline(Emailer):
     # Then add the ensemble storm track parameters to a config file. 
     
     def __init__(self, dates=None, times = None, previous_method=False,
-                 n_jobs=30, 
-                 out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
+                 n_jobs=30, out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
         
         self._BASE_PATH = '/work/mflora/SummaryFiles'
+        self.reports_path = '/work/mflora/LSRS/STORM_EVENTS_2017-2023.csv'
         self.out_path = out_path 
+        self.verbose=verbose
+        self.fix_date = True
         
         if dates is None:
-            self.dates = [d.split('_')[0] for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
+            # TODO: Make it year based! 
+            ##self.dates = [d.split('_')[0] for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
+            
+            possible_dates = [d for d in os.listdir(self._BASE_PATH) if '.txt' not in d and 'old' not in d]
+            possible_dates = [d for d in possible_dates if  8 <= len(d) <= 11 ]
+
+            possible_dates.sort()
+
+            valid_years = [2018, 2019, 2020, 2021, 2022]#, 2023]
+            self.dates = [date for date in possible_dates if int(date[:4]) in valid_years]
+            
             self.send_email_bool = True
             self.times=None
             self._NT = 36
+            self.debug=False
         else:
             self.dates = dates
             self.times = times
-            self._NT = 26
+            self.sample_size = 18 
+            self.debug = True
+            self._NT = 2
             self.send_email_bool = False
         
         self._runtype = 'rto'
@@ -245,9 +262,22 @@ class MLDataPipeline(Emailer):
         # Get the filenames. 
         filenames = self.files_to_run(original_type='ENSEMBLETRACKS', new_type = 'MLTARGETS')
         
+        if self.debug: 
+       
+            # Randomly sample 'sample_size' filenames from the list
+            filenames = random.sample(filenames, self.sample_size)
+        
         if len(filenames) > 0:
             run_parallel(
-                func = MatchReportsToTracks().match,
+                func = MatchToTracks(self.reports_path, 
+                                     min_dists=[0,1], 
+                                     err_window=15, 
+                                     return_df=False, 
+                                     forecast_length=30, 
+                                     size=3, 
+                                     n_expected_files=13,
+                                     verbose=False
+                                    ),
                 nprocs_to_use = self.n_jobs,
                 args_iterator = to_iterator(filenames),
                 description='Matching Reports to Tracks'
@@ -259,117 +289,10 @@ class MLDataPipeline(Emailer):
     def concatenate_dataframes(self,):
         """ Load the ML features and target dataframes
         and concatenate into a single dataframe """
-        delta_time_step = int(self._DURATION / self._DT)
         start_time = self.get_start_time()
-        
         ml_files = self.get_files('MLDATA')
-        
-        # TEMP.
-        ml_files.remove('/work/mflora/SummaryFiles/20170502/0100/wofs_MLDATA_24_20170503_0230_0300.feather')
-        ml_files.remove('/work/mflora/SummaryFiles/20180630/1800/wofs_MLDATA_45_20180630_2115_2145.feather')
-        
-        def concatenate_predictors_and_targets(ml_data_path, targets_data_path):
-            """Concatenate MLDATA and MLTARGETS files into a single dataframe."""
-            #print(ml_data_path, targets_data_path)
-            ml_df = pd.read_feather(ml_data_path)
-            targets_df = pd.read_feather(targets_data_path)
-            combined_df = pd.concat([targets_df, ml_df], axis=1)
 
-            return combined_df 
-    
-        def generate_dataset(ml_data_paths):
-            """Concatenate all the dataframes into a single dataframe"""
-            target_data_paths = [path.replace('MLDATA', 'MLTARGETS') for path in ml_data_paths]
-            which_exist = [os.path.exists(p) for p in target_data_paths]
-            ml_data_paths = np.array(ml_data_paths)[which_exist]
-            target_data_paths = np.array(target_data_paths)[which_exist]
-    
-            df_set = [concatenate_predictors_and_targets(ml_data_path, targets_data_path) for 
-                     ml_data_path, targets_data_path in zip(ml_data_paths, target_data_paths)]
-    
-            final_df = pd.concat(df_set, axis=0, ignore_index=True)
-    
-            return final_df 
-    
-        def remove_bad_data(X, X_bl):
-            # Remove obviously bad data. 
-    
-            feature_rngs = {'w_up__time_max__amp_ens_max' : 100,
-                'comp_dz__time_max__amp_ens_max' : 90,
-                'cape_ml__ens_mean__spatial_mean' : 20000,
-               }
-                
-            X_subset = X.copy()
-            X_bl_subset = X_bl.copy() 
-            for f, val in feature_rngs.items(): 
-                X_bl_subset = X_bl_subset.loc[X_subset[f].values<=val]
-                X_subset = X_subset.loc[X_subset[f].values<=val]
-        
-            X_subset.reset_index(inplace=True, drop=True)
-            X_bl_subset.reset_index(inplace=True, drop=True)
-
-            return X_subset, X_bl_subset 
-    
-    
-        final_df = generate_dataset(ml_files)
-         
-        hr_size = 12 
-        hr_rng = np.arange(13)
-        
-        ranges = [hr_rng, hr_rng+hr_size, hr_rng+(2*hr_size), hr_rng+(3*hr_size)]
-        names = ['first_hour', 'second_hour', 'third_hour', 'fourth_hour']
-        
-        for name, rng in tqdm(zip(names, ranges), desc='Saving datasets'): 
-            # Get the examples within a particular forecast time index range.
-            _df = final_df[final_df['forecast_time_index'].isin(rng).values].reset_index(drop=True) 
-            
-            baseline_features = [f for f in _df.columns if '__prob_max' in f]
-            targets = [f for f in _df.columns if 'severe' in f]
-
-            baseline_df = _df[baseline_features+self.METADATA+targets]
-
-            ml_features = [f for f in _df.columns if f not in baseline_features]
-            ml_df = _df[ml_features]
-           
-            baseline_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__baseline_data.feather'))
-            ml_df.to_feather(join(self.out_path, f'wofs_ml_severe__{name}__data.feather'))
-
-            
-        # Prune the dataset of bad examples
-        times = ['first_hour', 'second_hour', 'third_hour', 'fourth_hour']
-        base_path = '/work/mflora/ML_DATA/DATA'
-
-        for time in times: 
-            X = load_ml_data('hail_severe_0km', 
-                 lead_time = time, 
-                 mode = None, 
-                 return_only_df=True,
-                 base_path = '/work/mflora/ML_DATA/DATA',
-                 load_reduced=False,
-                 alter_init_times=False,
-                )
-    
-            X_bl = load_ml_data('hail_severe_0km', 
-                 lead_time = time, 
-                 mode = None, 
-                 return_only_df=True,
-                 baseline=True,
-                 base_path = '/work/mflora/ML_DATA/DATA',
-                 load_reduced=False,
-                 alter_init_times=False,
-                )
-    
-            blpath = os.path.join(base_path, f'wofs_ml_severe__{time}__baseline_reduced_data.feather')
-            path = os.path.join(base_path, f'wofs_ml_severe__{time}__reduced_data.feather')
-    
-            X_new, X_bl_new = remove_bad_data(X, X_bl)
-
-            # Save the reduced dataset. 
-            X_new, X_bl_new = remove_bad_data(X, X_bl)
-
-            X_new.to_feather(path)
-            X_bl_new.to_feather(blpath)
-        
+        Concatenator()(ml_files, self.out_path, fix_date=self.fix_date)
             
         if self.send_email_bool:
             self.send_email('Final datasets are built and pruned!', start_time)

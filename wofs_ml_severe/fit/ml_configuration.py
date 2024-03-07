@@ -10,7 +10,16 @@ import scipy.stats as stats
 
 try:
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
+except:
+    print('interpret-ml not installed')
+    ExplainableBoostingRegressor = None
+
+try:
     from scikeras.wrappers import KerasClassifier, KerasRegressor
+except:
+    print('scikeras is not installed')
+    
+try:
     import tensorflow as tf
 
     from tensorflow import keras
@@ -33,7 +42,7 @@ try:
     import tensorflow.keras.backend as K
 except ImportError:
     print('Tensorflow is not installed. Moving on')
-    ExplainableBoostingRegressor = None
+
     
 import numpy as np
 
