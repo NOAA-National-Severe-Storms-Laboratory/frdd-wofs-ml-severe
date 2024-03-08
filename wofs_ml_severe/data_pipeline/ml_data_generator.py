@@ -264,7 +264,9 @@ class MLDataGenerator:
             # Generate the local explainability JSON. 
             if self.explain:
                 explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
-                                     ensemble_track_file, ml_config, hail_size=hail_size, scale='local'                               
+                                     ensemble_track_file, ml_config, hail_size=hail_size, 
+                                                                model_path=self.model_path, 
+                                                                scale='local'                               
                                 )    
                 explainability_files.append(explainfile) 
                 
@@ -274,6 +276,7 @@ class MLDataGenerator:
                                                                               dataframe, features, 
                                                                              ensemble_track_file, ml_config,
                                                                              hail_size=hail_size, 
+                                                                             model_path=self.model_path, 
                                                                              scale = 'global')    
                 explainability_files.append(global_explainfile)     
                 
@@ -282,7 +285,7 @@ class MLDataGenerator:
 
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
-                                     ensemble_track_file, ml_config, hail_size=None, scale='local'
+                                     ensemble_track_file, ml_config, hail_size, model_path, scale='local', 
                                 ): 
         """Generate the local or global explainability JSON file"""
         target_str = ml_config['TARGET_CONVERTER'].get(target, target)
@@ -312,7 +315,7 @@ class MLDataGenerator:
             # The local explainability uses the input (val*coef) for the logistic regression model. 
             # It sums together attributions of the log-odds for a feature parent (i.e., all variations on 
             # mid-level UH). or use the SHAP method to determine the top features for a particular example. 
-            X_train = pd.read_feather(os.path.join(ml_config['ML_MODEL_PATH'], 'shap_samples.feather'))
+            X_train = pd.read_feather(os.path.join(model_path, 'shap_samples.feather'))
             X_train = X_train[X.columns]
             
             explainer = LocalExplainer(model, X, X_train=X_train)
