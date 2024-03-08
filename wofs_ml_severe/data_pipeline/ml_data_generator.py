@@ -285,7 +285,7 @@ class MLDataGenerator:
 
     def generate_explainability_json(self, model, X, 
                                      target, dataframe, features, 
-                                     ensemble_track_file, ml_config, hail_size=None, model_path, scale='local', 
+                                     ensemble_track_file, ml_config, hail_size, model_path, scale='local', 
                                 ): 
         """Generate the local or global explainability JSON file"""
         target_str = ml_config['TARGET_CONVERTER'].get(target, target)
