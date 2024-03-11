@@ -128,7 +128,7 @@ class LocalExplainer:
     def _shap(self):
 
         shap_kws={'masker' : shap.maskers.Partition(self._X_train, 
-                                                    max_samples=100, 
+                                                    max_samples=25, 
                                                     clustering="correlation"), 
                                                    'algorithm' : 'permutation'}
 

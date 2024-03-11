@@ -246,10 +246,13 @@ class MLDataGenerator:
             # Compute the probabilities or hail size.
             # TODO: refactor for the hail regression model.
             if 'Regressor' in model_fname:
-                predictions = model.predict(X)
-                # Temporary fix for negative hail sizes! 
-                predictions[predictions<=0.0] = 0.0
-                hail_size = predictions
+                if model is not None: 
+                    predictions = model.predict(X)
+                    # Temporary fix for negative hail sizes! 
+                    predictions[predictions<=0.0] = 0.0
+                else:
+                    predictions = np.zeros(len(X))
+                hail_size = predictions.copy()                             
             else:
                 predictions = model.predict_proba(X)[:,1]
             
@@ -262,7 +265,7 @@ class MLDataGenerator:
             prediction_data[f'trimmed_tracks'] = (['NY', 'NX'], storm_objects_trimmed)
             
             # Generate the local explainability JSON. 
-            if self.explain:
+            if self.explain and model is not None:
                 explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
                                      ensemble_track_file, ml_config, hail_size=hail_size, 
                                                                 model_path=self.model_path, 

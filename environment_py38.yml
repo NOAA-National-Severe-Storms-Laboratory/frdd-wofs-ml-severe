@@ -1,4 +1,4 @@
-name: monte_python
+name: base
 channels:
   - conda-forge
   - defaults
