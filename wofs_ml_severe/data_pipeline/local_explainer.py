@@ -19,6 +19,14 @@ class LocalExplainer:
         self._X_train = X_train
         self._n_pred = n_pred
 
+    def has_coefs(self):
+        try:
+            base_est = self._model.estimators[0].calibrated_classifiers_[0].base_estimator
+            coef = base_est.named_steps['model'].coef_[0,:]
+            return True
+        except: 
+            return False 
+
     def top_features(self, target, method='coefs'):
         """Returns the top predictors and their values for a set of input data.
         Parameters
@@ -28,6 +36,10 @@ class LocalExplainer:
             determine the top predictors. If 'shap', use the SHAP permutation method to 
             determine the top predictors. 
         """
+        if method == 'coefs':
+            if not self.has_coefs():
+                method = 'shap'
+
         if method == 'coefs':
             inputs = self.lr_inputs()
             attrs = self.to_dataframe(inputs, self._features)
@@ -55,7 +67,6 @@ class LocalExplainer:
     def to_dataframe(self, attrs, features ):
         return pd.DataFrame(attrs, columns = features)
            
-
     def just_transforms(self, estimator):
         """Applies all transforms to the data, without applying last 
         estimator.
@@ -71,6 +82,7 @@ class LocalExplainer:
         Xt = X
         for name, transform in estimator.steps[:-1]:
             Xt = transform.transform(Xt)
+            
         return Xt
 
 
