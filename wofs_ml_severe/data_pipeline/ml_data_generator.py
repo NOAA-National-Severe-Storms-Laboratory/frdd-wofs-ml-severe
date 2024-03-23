@@ -31,9 +31,9 @@ import joblib
 # WoFS modules 
 _base_module_path = '/home/monte.flora/python_packages/frdd-wofs-post'
 _base_mp_path = '/home/monte.flora/python_packages/MontePython'
-#import sys
-#sys.path.insert(0, _base_module_path)
-#sys.path.insert(0,_base_mp_path)
+import sys
+sys.path.insert(0, _base_module_path)
+sys.path.insert(0,_base_mp_path)
 import monte_python 
 
 from ..common.multiprocessing_utils import run_parallel, to_iterator
@@ -211,76 +211,100 @@ class MLDataGenerator:
         
     def is_there_an_object(self, storm_objects):   
         return np.max(storm_objects) > 0
-
-    def get_predictions(self, time, dataframe, storm_objects, ds_subset, ml_config, ens_probs, ensemble_track_file=None):
-        """
-        Produces 2D probabilistic predictions from the ML model and baseline system
-        """
-        prediction_data = {}
-        object_labels = dataframe['label']
-        times = [time] if not is_list(time) else time
-        
-        explainability_files = [] 
-        
-        # Create the trimmed objects.
-        tag='trimmed'
+    
+    def get_trimmed_object(self, storm_objects, ens_probs): 
+        """Get the trimmed storm objects"""
         qc_params = [('trim', (9/18, 4/18))]
         object_props = regionprops(storm_objects, ens_probs) 
         qcer = monte_python.QualityControler()
         storm_objects_trimmed, _ = qcer.quality_control(ens_probs, storm_objects, object_props, qc_params)
         
-        ml_model_path = os.path.join(self.model_path, ml_config['MODEL_NAMES'][-1])
-        _, _, features = load_ml_models_2024(ml_model_path, return_features=True)
+        return storm_objects_trimmed
+    
+    def get_predictions(self, 
+                        dataframe=None, 
+                        storm_objects=None, 
+                        ds_subset=None, 
+                        ml_config=None, 
+                        ens_probs=None, 
+                        ensemble_track_file=None, 
+                        is_there_objects=True):
+        """
+        Produces 2D probabilistic predictions from the ML model and baseline system
+        """
+        prediction_data = {}
+        explainability_files = [] 
+        tag='trimmed'
         
-        X = dataframe[features] 
-        X = fix_data(X)
-        # Deprecated due to issues with Initialization time. 
-        # Get the numeric init time 
-        if 'Initialization Time' in X.columns:
-            X = get_numeric_init_time(X)
-        
+        if is_there_objects:
+            object_labels = dataframe['label']
+            ml_model_path = os.path.join(self.model_path, ml_config['MODEL_NAMES'][-1])
+            _, _, features = load_ml_models_2024(ml_model_path, return_features=True)
+            X = dataframe[features] 
+            X = fix_data(X)
+            # Deprecated due to issues with Initialization time. 
+            # Get the numeric init time 
+            if 'Initialization Time' in X.columns:
+                X = get_numeric_init_time(X)
+             # Create the trimmed objects.
+            storm_objects_trimmed = self.get_trimmed_object(storm_objects, ens_probs)
+            
+        else:
+            object_labels = [] 
+            storm_objects_trimmed = storm_objects.copy() 
+            X = None
+  
         for model_fname in ml_config['MODEL_NAMES']:
             model, target = load_ml_models_2024(os.path.join(self.model_path, model_fname))
             target = simplify_target(target)
-
-            # Compute the probabilities or hail size.
-            # TODO: refactor for the hail regression model.
-            if 'Regressor' in model_fname:
-                if model is not None: 
-                    predictions = model.predict(X)
-                    # Temporary fix for negative hail sizes! 
-                    predictions[predictions<=0.0] = 0.0
+            
+            if X is None:
+                predictions = None 
+            else:    
+            
+                # Compute the probabilities or hail size.
+                # TODO: refactor for the hail regression model.
+                if 'Regressor' in model_fname:
+                    if model is not None: 
+                        predictions = model.predict(X)
+                        # Temporary fix for negative hail sizes! 
+                        predictions[predictions<=0.0] = 0.0
+                    else:
+                        predictions = np.zeros(len(X))
+                    hail_size = predictions.copy()                             
                 else:
-                    predictions = np.zeros(len(X))
-                hail_size = predictions.copy()                             
-            else:
-                predictions = model.predict_proba(X)[:,1]
+                    predictions = model.predict_proba(X)[:,1]
             
             # Create the full and trimmed tracks and save them to the dataset. 
-            for name, objs in zip(['full', 'trimmed'], [storm_objects,storm_objects_trimmed]):
-                predictions_2d = self.to_2d(predictions, objs, object_labels, shape_2d=storm_objects.shape)
+            for name, objs in zip(['full', 'trimmed'], [storm_objects, storm_objects_trimmed]):
+                if predictions is None:
+                    predictions_2d = np.zeros((storm_objects.shape), dtype=np.int32)
+                else:    
+                    predictions_2d = self.to_2d(predictions, objs, object_labels, shape_2d=storm_objects.shape)
+                
                 prediction_data[f'ML__{target}__{name}'] = (['NY', 'NX'], predictions_2d)
             
             # Add trimmed tracks to save files. 
             prediction_data[f'trimmed_tracks'] = (['NY', 'NX'], storm_objects_trimmed)
             
             # Generate the local explainability JSON. 
-            if self.explain and model is not None:
-                explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
+            if self.explain and model is not None and is_there_objects:
+                if 'Regressor' not in model_fname:
+                    explainfile = self.generate_explainability_json(model, X, target, dataframe, features, 
                                      ensemble_track_file, ml_config, hail_size=hail_size, 
                                                                 model_path=self.model_path, 
                                                                 scale='local'                               
                                 )    
-                explainability_files.append(explainfile) 
+                    explainability_files.append(explainfile) 
                 
                 # Generate the global explainability JSON. 
                 global_explainfile = self.generate_explainability_json(model, 
-                                                                              X, target, 
-                                                                              dataframe, features, 
-                                                                             ensemble_track_file, ml_config,
-                                                                             hail_size=hail_size, 
-                                                                             model_path=self.model_path, 
-                                                                             scale = 'global')    
+                                                                       X, target, 
+                                                                       dataframe, features, 
+                                                                       ensemble_track_file, ml_config,
+                                                                        hail_size=hail_size, 
+                                                                        model_path=self.model_path, 
+                                                                        scale = 'global')    
                 explainability_files.append(global_explainfile)     
                 
                 
@@ -322,7 +346,7 @@ class MLDataGenerator:
             X_train = X_train[X.columns]
             
             explainer = LocalExplainer(model, X, X_train=X_train)
-            top_features, top_values = explainer.top_features(target_str, method='shap')
+            top_features, top_values = explainer.top_features(target_str, method='coefs')
             
         else:
             # The global explainability uses a static list of top features, which was determined 
@@ -457,7 +481,6 @@ class MLDataGenerator:
         updraft_tracks = ensemble_track_ds['updraft_tracks'].values
         generated_files = []
         
-
         if self.is_there_an_object(storm_objects):
             # Load ENV file
             ds_env = open_dataset(env_file, decode_times=False)
@@ -552,12 +575,8 @@ class MLDataGenerator:
             dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
             
             # If we are running in realtime, then we want to generate the predictions.
-            if self.predict:
-                # Check the time index to determine the right model. 
-                time_index = int(env_file.split('_')[-4])
-                time = get_time_str(time_index)
-                
-                mlprob_file = self.get_predictions(time, dataframe, storm_objects, ds_subset, ml_config, 
+            if self.predict:   
+                mlprob_file = self.get_predictions(dataframe, storm_objects, ds_subset, ml_config, 
                                                    intensity_img, ensemble_track_file)
                 generated_files.extend(mlprob_file)
             
@@ -598,19 +617,13 @@ class MLDataGenerator:
             if self.predict:
                 ds_env = open_dataset(env_file, decode_times=False)
                 ds_subset = ds_env[['xlat', 'xlon', 'hgt']]
-                prediction_data={}
-                for pair in itertools.product(ml_config['MODEL_NAMES'], ml_config['TARGETS']):
-                    model_name, target = pair
-                    model_name_str = 'ML' if model_name == 'Average' else model_name
-                    target_str = get_target_str(target)
-                    
-                    for name in ['full', 'trimmed']:
-                        prediction_data[f'{model_name_str}__{target_str}__{name}'] = (['NY', 'NX'],
-                                                          np.zeros((storm_objects.shape), dtype=np.int32))
-                    # Add trimmed tracks to save files. 
-                    prediction_data[f'trimmed_tracks'] = (['NY', 'NX'], np.zeros((storm_objects.shape), dtype=np.int32))
-                    
-                generated_files.extend(self.to_xarray(prediction_data, storm_objects, ds_subset, ensemble_track_file, []))
+                mlprob_file = self.get_predictions(storm_objects=storm_objects, 
+                                                   ml_config=ml_config, 
+                                                   ds_subset = ds_subset, 
+                                                   ensemble_track_file=ensemble_track_file,
+                                                   is_there_objects=False)
+                generated_files.extend(mlprob_file)
+                
                 ds_env.close()
                 gc.collect()
                 del ds_env
