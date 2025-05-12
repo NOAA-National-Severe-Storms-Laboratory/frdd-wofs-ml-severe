@@ -23,7 +23,6 @@ stages:
   displayName: Build Package
   jobs:
       - job:
-        displayName: $(DEFAULT_POOL_IMAGE)
         pool:
           vmImage: $(DEFAULT_POOL_IMAGE)
         strategy:
@@ -79,7 +78,7 @@ stages:
           condition: eq(variables['AZ_DEVOPS_DEPLOY_GITHUB'], 'TRUE')
           inputs:
             gitHubConnection: $(AZ_DEVOPS_GITHUB_SERVICE_CONNECTION_NAME)
-            repositoryName: $(AZ_DEVOPS_GITHUB_ORGANIZATION_NAME)/wofs_ml_severe
+            repositoryName: $(AZ_DEVOPS_GITHUB_ORGANIZATION_NAME)/frdd-wofs-ml-severe
             isPreRelease: false
             tagSource: userSpecifiedTag
             assets: dist/*.whl
