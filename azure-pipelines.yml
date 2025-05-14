@@ -15,8 +15,6 @@ variables:
 - group: ${{ parameters.vargroup }}
 - name: PACKAGE_VERSION
   value: ${{ parameters.package_version }}.$(Build.BuildId)
-- name: vmImageName
-  value: 'ubuntu-22.04'
 
 stages:
 - stage: Build
