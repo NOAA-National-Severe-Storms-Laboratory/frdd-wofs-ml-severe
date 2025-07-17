@@ -13,9 +13,9 @@ dependencies:
   - scikit-learn-intelex=2023.0.1
   - setuptools=70.*  
   - pip:
-    - tensorflow==2.15.0
-    - jax==0.4.24
-    - jaxlib==0.4.24
+    - tensorflow>=2.15.0
+    - jax==0.4.35
+    - jaxlib==0.4.35
     - imblearn
     - hyperopt
     - lightgbm
