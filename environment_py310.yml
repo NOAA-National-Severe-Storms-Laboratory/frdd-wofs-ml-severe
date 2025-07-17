@@ -13,7 +13,7 @@ dependencies:
   - scikit-learn-intelex=2023.0.1
   - setuptools=70.*  
   - pip:
-    - tensorflow>=2.15.0
+    - tensorflow==2.16.2
     - jax==0.4.35
     - jaxlib==0.4.35
     - imblearn
