@@ -14,8 +14,8 @@ dependencies:
   - setuptools=70.*  
   - pip:
     - tensorflow==2.16.2
-    - jax==0.4.35
-    - jaxlib==0.4.35
+    - jax==0.4.28
+    - jaxlib==0.4.28
     - imblearn
     - hyperopt
     - lightgbm
