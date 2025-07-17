@@ -50,7 +50,8 @@ stages:
             
         - bash: |
             # workaround based on recent failures
-            rm /usr/share/miniconda/pkgs/cache/*.json    
+            rm /usr/share/miniconda/pkgs/cache/*.json
+            conda tos accept
             conda env create --file $(env_file)
           displayName: Create mamba environment            
      
