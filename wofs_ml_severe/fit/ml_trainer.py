@@ -6,9 +6,9 @@ import numpy as np
 
 # The custom classifier 
 import sys
-sys.path.insert(0, '/home/monte.flora/python_packages/wofs_ml_severe')
-sys.path.insert(0, '/home/monte.flora/python_packages/ml_workflow')
-sys.path.insert(0, '/home/monte.flora/python_packages/WoF_post')
+sys.path.insert(0, '/home/lucas.jones/frdd-wofs-ml-severe')
+sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-ml-workflow')
+sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-WoF_post')
 
 from ..common.emailer import Emailer 
 from ..io.io import MLDataLoader

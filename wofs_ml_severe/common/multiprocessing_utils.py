@@ -8,7 +8,8 @@ from collections import ChainMap
 import warnings
 from copy import copy
 
-from joblib._parallel_backends import SafeFunction
+#import joblib._parallel_backends below seems to be unused, Lucas commented out
+#from joblib._parallel_backends import SafeFunction
 from joblib import delayed, Parallel
 
 # Ignore the warning for joblib to set njobs=1 for

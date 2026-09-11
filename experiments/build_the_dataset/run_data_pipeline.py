@@ -15,11 +15,11 @@ from wofs_ml_severe.data_pipeline.ml_data_pipeline import MLDataPipeline
 #skip = []
 
 delete_types = []
-skip = ['get_ensemble_tracks']#, 'get_ml_features', 'match_to_storm_reports']
+skip = []    #'get_ensemble_tracks', 'get_ml_features', 'match_to_storm_reports']
 
 n_jobs = 30
 
 # For debugging.
-#dataPipeline = MLDataPipeline(dates=['20210526'], times=['2300'], n_jobs=30)(delete_types)
+dataPipeline = MLDataPipeline(dates=['20260423'], times=['1700'], n_jobs=30)(delete_types)
 
-dataPipeline = MLDataPipeline(n_jobs=n_jobs)(skip, delete_types)
+#dataPipeline = MLDataPipeline(n_jobs=n_jobs)(skip, delete_types)

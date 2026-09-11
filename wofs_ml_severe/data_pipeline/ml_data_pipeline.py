@@ -4,6 +4,9 @@
 # 
 # Author: Montgomery Flora (Git username : monte-flora)
 # Email : monte.flora@noaa.gov 
+#
+# Changes By: Lucas Jones (Git username : LucasJ-NSSL)
+# Date: Sept. 10, 2026
 #======================================================
 
 # Python Modules 
@@ -78,10 +81,10 @@ class MLDataPipeline(Emailer):
     # Then add the ensemble storm track parameters to a config file. 
     
     def __init__(self, dates=None, times = None, previous_method=False,
-                 n_jobs=30, out_path ='/work/mflora/ML_DATA/DATA/', verbose=True):
+                 n_jobs=30, out_path ='/work2/lucas.jones/mpas_wofs/SummaryFiles/', verbose=True):
         
-        self._BASE_PATH = '/work/mflora/SummaryFiles'
-        self.reports_path = '/work/mflora/LSRS/STORM_EVENTS_2017-2023.csv'
+        self._BASE_PATH = '/work2/lucas.jones/mpas_wofs/SummaryFiles/2026/'
+        self.reports_path = '/work2/lucas.jones/LSRS/STORM_EVENTS_2026-2026.csv'
         self.out_path = out_path 
         self.verbose=verbose
         self.fix_date = True
@@ -95,7 +98,7 @@ class MLDataPipeline(Emailer):
 
             possible_dates.sort()
 
-            valid_years = [2018, 2019, 2020, 2021, 2022]#, 2023]
+            valid_years = [2026]
             self.dates = [date for date in possible_dates if int(date[:4]) in valid_years]
             
             self.send_email_bool = True
@@ -125,9 +128,10 @@ class MLDataPipeline(Emailer):
         self.delete_existing_files(delete_types)
         
         self.keep_existing_ml_files = keep_existing_ml_files
-        
-        if 'FINAL' in delete_types:
-            os.system('rm /work/mflora/ML_DATA/DATA/wofs*')
+
+        # TODO: figure out the purpose of this
+        #if 'FINAL' in delete_types:
+            #os.system('rm /work/mflora/ML_DATA/DATA/wofs*').    Currently removed for safety
         
         print('info', '='*50) 
         print('info', '============= STARTING A NEW DATA PIPELINE =============') 
@@ -160,7 +164,7 @@ class MLDataPipeline(Emailer):
         if len(types)==0:
             return None 
         
-        base_path = '/work/mflora/SummaryFiles'
+        base_path = '/work2/lucas.jones/mpas_wofs/SummaryFiles/'    
 
         paths = []
         date_paths = [join(self._BASE_PATH, d) for d in os.listdir(base_path)]
@@ -352,15 +356,9 @@ class MLDataPipeline(Emailer):
             indir = Path(track_file).parent.resolve()
             ti = int(decompose_file_path(track_file)['TIME_INDEX'])
             try:
-                env_file = glob(join(indir, f'wofs_ENV_{ti-delta_time_step:02d}*'))[0]
-                svr_file = env_file.replace('ENV', 'SVR')
+                all_file = [glob(join(indir, f'wofs_ALL_{t:02d}*'))[0] for t in range(ti-delta_time_step, ti+1)]
+                files = {"track_file" : track_file, "all_file" : all_file}
 
-                ens_files = [glob(join(indir, f'wofs_ENS_{t:02d}*'))[0] for t in range(ti-delta_time_step, ti+1)]
-                files = {'track_file' : track_file, 
-                     'env_file'   : env_file,
-                     'svr_file'   : svr_file, 
-                     'ens_file'   : ens_files,
-                }
                 if self.keep_existing_ml_files:
                     if not exists(track_file.replace('ENSEMBLETRACKS', 'MLDATA').replace('.nc', '.feather')):
                         paths.append(files)

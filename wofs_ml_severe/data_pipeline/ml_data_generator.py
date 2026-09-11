@@ -6,6 +6,9 @@
 # 
 # Author: Montgomery Flora (Git username : monte-flora)
 # Email : monte.flora@noaa.gov 
+#
+# Changes By: Lucas Jones (Git username : LucasJ-NSSL)
+# Date: Sept. 3, 2026
 #======================================================
 
 # Python Modules
@@ -29,8 +32,8 @@ import pandas as pd
 import joblib
 
 # WoFS modules 
-_base_module_path = '/home/monte.flora/python_packages/frdd-wofs-post'
-_base_mp_path = '/home/monte.flora/python_packages/MontePython'
+_base_module_path = '/home/lucas.jones/python_packages/frdd-wofs-post'
+_base_mp_path = '/home/lucas.jones/python_packages/frdd-monte-python'
 import sys
 sys.path.insert(0, _base_module_path)
 sys.path.insert(0,_base_mp_path)
@@ -39,7 +42,10 @@ import monte_python
 from ..common.multiprocessing_utils import run_parallel, to_iterator
 from ..common.util import decompose_file_path, get_target_str, is_list, get_time_str, fix_data
 
+# ignore for now, they are only used for producing predictions 
+'''
 from wofs.common import remove_reserved_keys
+'''
 from wofs.common.zarr import open_dataset, normalize_filename
 from wofs.post.utils import (
     save_dataset,
@@ -47,6 +53,7 @@ from wofs.post.utils import (
     load_multiple_nc_files,
     load_yaml
 )
+#'''
 
 # Personal Modules 
 from ..io.load_ml_models import load_ml_model, load_calibration_model, load_ml_models_2024
@@ -387,7 +394,7 @@ class MLDataGenerator:
         
         base_path = dirname(ensemble_track_file) 
         t = int(decompose_file_path(ensemble_track_file)['TIME_INDEX'])
-        ens_files = [glob(os.path.join(base_path, f'wofs_ENS_{_t:02d}*'))[0] for _t in range(t-6, t+1)]
+        ens_files = [glob(os.path.join(base_path, f'wofs_ALL_{_t:02d}*'))[0] for _t in range(t-6, t+1)]
         
         svr_file = ens_files[0].replace('ENS', 'SVR') 
         
@@ -443,7 +450,7 @@ class MLDataGenerator:
             ml_data_path = ensemble_track_file.replace('ENSEMBLETRACKS', 'MLDATA').replace('.nc', '.feather')
             ml_df = pd.read_feather(ml_data_path)
             
-            new_df = pd.concat([ml_df, df_spatial], axis=1)
+            new_df = pd.concat([ml_df, df_spatial], axis=0)
             new_df.reset_index(inplace=True, drop=True) 
         
             # overwrite the existing file. 
@@ -458,11 +465,10 @@ class MLDataGenerator:
         Generates the dataframe of input features, the file for the explainability graphic, 
         and the 2D ML predictions used for webviewer graphics. 
         """    
+        #change from prior method to segment the ALL files since ENV and SVR files no longer exist
         ensemble_track_file = file_dict['track_file'] 
-        env_file= file_dict['env_file'] 
-        svr_file= file_dict['svr_file'] 
-        ens_files= file_dict['ens_file']
         ml_config = self._load_config(ensemble_track_file) 
+        all_file = file_dict["all_file"]
         
         ########
         if self.debug:
@@ -482,13 +488,18 @@ class MLDataGenerator:
         generated_files = []
         
         if self.is_there_an_object(storm_objects):
-            # Load ENV file
-            ds_env = open_dataset(env_file, decode_times=False)
-            ds_subset = ds_env[['xlat', 'xlon', 'hgt']]
+            #load a single all file but extract the env, svr, and ens data into separate 
+            # data frames. This ends up being much simpler than before since all of these 
+            # are present in the ALL file.
+            ds_env = open_dataset(all_file[0], decode_times = False)
+            ds_ens = xr.open_mfdataset(all_file, concat_dim = 'time', combine = "nested",
+                                       decode_times = False)
             try:
-                env_data = {var: ds_env[var].values for var in ml_config['ENV_VARS']}
+                env_data = ds_env[ml_config["ENV_VARS"]]
+                svr_data = ds_env[ml_config["SVR_VARS"]]
+                storm_ds = ds_ens[ml_config["ENS_VARS"]]
             except:
-                print(f"Issue with {env_file}. Likely due to the missing variable for eariler WoFS years!")
+                print(f"Issue with {all_file}. Likely due to a missing variable.")
                 ds_env.close()
                 gc.collect()
                 return None
@@ -512,36 +523,17 @@ class MLDataGenerator:
                     # C -> F 
                     if var in env_data.keys():
                         env_data[var] = (1.8 * env_data[var]) + 32.  
-                
+
             # Some environmental variables may be in the ENS files
+            # should no longer be necessary with the new ALL files but leaving in case
+            '''
             if len(ml_config['ENV_IN_ENS_VARS']) > 0:
                 ds_ens = open_dataset(ens_files[0], decode_times=False)
                 ens_data = {var: ds_ens[var].values for var in ml_config['ENV_IN_ENS_VARS']}
                 env_data = {**env_data, **ens_data}
                 ds_ens.close()
                 del ds_ens
-
-            # Load the SVR file
-            ds_svr = open_dataset(svr_file, decode_times=False)
-            try:
-                svr_data = {var: ds_svr[var].values for var in ml_config['SVR_VARS']}
-            except:
-                print(f"Issue with {svr_file}. Likely due to the missing SRH0to1")
-                ds_env.close()
-                gc.collect()
-                return None 
-                
-            coord_vars = ["xlat", "xlon", "hgt"]
-            try:
-                multiple_datasets_dict, coord_vars_dict, dataset_attrs, var_attrs  = load_multiple_nc_files(
-                        ens_files, concat_dim="time", coord_vars=coord_vars,  load_vars=ml_config['ENS_VARS'])
-            except: 
-                gc.collect()
-                print(f"Issue with {ens_files}. Likely a missing variable ('uh_0to2')")
-                return None 
-       
-            # Convert data to xarray.Dataset 
-            storm_ds = xr.Dataset(multiple_datasets_dict)
+            '''
             
             # Initialize the Extracter class. 
             extracter = StormBasedFeatureExtracter(ml_config, cond_var=None)
@@ -550,7 +542,7 @@ class MLDataGenerator:
             env_data = {**env_data, **svr_data}
         
             # Determine the Run date and Init. time from the file path. 
-            run_date, init_time = self.decompose_path(env_file) 
+            run_date, init_time = self.decompose_path(all_file[0]) 
             
             # Run the extracter. Returns the data as a dataframe. 
             dataframe = extracter.extract(storm_objects,
@@ -564,14 +556,13 @@ class MLDataGenerator:
             # Close the netcdf files
             storm_ds.close()
             ds_env.close()
-            ds_svr.close()
-            del storm_ds, ds_env, ds_svr
+            del storm_ds, ds_env
 
             # Add the run date as metadata. 
             dataframe['Run Date'] = [int(run_date)] * len(dataframe)
 
             # Add the forecast time index. 
-            time_index = decompose_file_path(env_file)['TIME_INDEX']
+            time_index = decompose_file_path(all_file[0])['TIME_INDEX']
             dataframe['forecast_time_index'] = [int(time_index)] * len(dataframe)
             
             # If we are running in realtime, then we want to generate the predictions.
@@ -611,11 +602,13 @@ class MLDataGenerator:
                 # Save the EXPLAIN file. 
                 df_subset.to_json(explain_fname)
 
-            return [save_df_file, explain_fname] + generated_files
+                return [save_df_file, explain_fname] + generated_files
+
+            return [save_df_file] + generated_files
 
         else:
             if self.predict:
-                ds_env = open_dataset(env_file, decode_times=False)
+                ds_env = open_dataset(all_file[0], decode_times=False)
                 ds_subset = ds_env[['xlat', 'xlon', 'hgt']]
                 mlprob_file = self.get_predictions(storm_objects=storm_objects, 
                                                    ml_config=ml_config, 

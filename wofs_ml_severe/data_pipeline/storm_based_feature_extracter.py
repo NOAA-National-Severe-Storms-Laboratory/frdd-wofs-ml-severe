@@ -2,7 +2,10 @@
 # Extracts ML features using storm tracks. 
 # 
 # Author: Montgomery Flora (Git username : monte-flora)
-# Email : monte.flora@noaa.gov 
+# Email : monte.flora@noaa.gov
+# 
+# Changes By: Lucas Jones (Git username : LucasJ-NSSL)
+# Date: Sept. 8, 2026 
 #======================================================
 
 # Python Modules
@@ -21,7 +24,7 @@ import xarray as xr
 _base_module_path = '/home/monte.flora/python_packages/WoF_post'
 import sys
 sys.path.insert(0, _base_module_path)
-from wofs.post.utils import convert_to_seconds
+#from wofs.post.utils import convert_to_seconds
 
 
 class StormBasedFeatureExtracter():
@@ -212,12 +215,13 @@ class StormBasedFeatureExtracter():
         wnd_probs = {f'wind_nmep_>{t}_{n*self.dx}km': self.calc_ensemble_probs(data['ws_80__time_max'], 
                                                                                thresh=t, size=n)
                     for t,n in itertools.product(WIND_THRESHS, NMEP_SIZES)} 
-        
+        '''
+        Currently do not have hailcast variable in the WoFS output so ignoring for now
         hail_probs = {f'hail_nmep_>{t}_{n*self.dx}km': self.calc_ensemble_probs(data['hailcast__time_max'], 
                                                                                 thresh=t, size=n)
                     for t,n in itertools.product(HAIL_THRESHS, NMEP_SIZES)} 
-        
-        baseline_probs = {**uh_probs, **wnd_probs, **hail_probs}
+        '''
+        baseline_probs = {**uh_probs, **wnd_probs} #, **hail_probs}
     
         return baseline_probs 
     

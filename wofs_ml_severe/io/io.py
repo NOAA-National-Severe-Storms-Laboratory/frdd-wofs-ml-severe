@@ -115,10 +115,10 @@ class MLDataLoader:
     def __init__(self, target_column=None, lead_time='first_hour',  mode='training', 
                  return_full_dataframe = False, load_reduced_dataframe=True, 
                  load_baseline_dataframe=False, 
-                 data_path = '/work/mflora/ML_DATA/DATA', 
+                 data_path = '/work2/lucas.jones/mpas-wofs/', 
                  random_state=123, 
                  months = ['April', 'May', 'June'],
-                 years = [2018, 2019, 2020, 2021, 2022], 
+                 years = [2026], 
                  exclude_missing_mesh=False, 
                  alter_init_times = False, load_multiple_y=False,
                  drop_features = True, 
@@ -289,7 +289,7 @@ class MLDataLoader:
         dataframe = pd.concat([X, metadata], axis=1)
         dataframe['target'] = y
         
-        # Split the dates into train and validatoin
+        # Split the dates into train and validation
         unique_run_dates = np.unique(dataframe['Run Date'])
         train_dates, val_dates = train_test_split(unique_run_dates, 
                                                 test_size=test_size, 
@@ -466,7 +466,8 @@ class MLDataLoader:
             # Not longer using the instanteous version of UH and vert vort.
             if any([n in f for n in ['uh', 'wz']]) and 'instant' not in f:
                 drop_vars.append(f)
-                
+
+            # TODO I see no reasons these could not be included for MPAS WoFS
             # The mixed layer computations changed in 2023 to fix a known bug. Unfortunately, 
             # since we cannot reprocess the prior summary files. We have to remove these features.
             if any([v in f for v in ['cape_ml', 'cin_ml', 'lcl_ml', 'cape_mu', 'cin_mu', 'lcl_mu']]):

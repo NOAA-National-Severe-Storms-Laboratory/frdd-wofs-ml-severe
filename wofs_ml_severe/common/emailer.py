@@ -15,9 +15,9 @@ class Emailer:
     
         return hours, minutes, seconds
     
-    def send_email(self, subject, start_time, password="jmfzjrnyooyrhteo", 
+    def send_email(self, subject, start_time, password="", 
                    port=465, sender_email=None, 
-                   receiver_email='monte.flora@noaa.gov'):
+                   receiver_email='lucas.w.jones-1@ou.edu'):
         """
         Send an email when a job is finished is running. 
         
@@ -64,6 +64,6 @@ class Emailer:
             msg[key] = item 
 
         # Send the mesage. 
-        with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
+        with smtplib.SMTP_SSL("smtp.outlook.com", port, context=context) as server:
             server.login(sender_email, password)
             server.sendmail(sender_email, receiver_email, msg.as_string())

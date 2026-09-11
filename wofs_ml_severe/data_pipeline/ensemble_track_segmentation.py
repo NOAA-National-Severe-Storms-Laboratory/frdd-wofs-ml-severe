@@ -3,6 +3,9 @@
 # 
 # Author: Montgomery Flora (Git username : monte-flora)
 # Email : monte.flora@noaa.gov 
+# 
+# Changed By: Lucas Jones (Git username : LucasJ-NSSL)
+# Date: Sept. 8, 2026
 #======================================================
 
 # Python Modules 
@@ -14,8 +17,8 @@ import numpy as np
 from scipy.ndimage import maximum_filter, gaussian_filter
 
 # WoFS modules 
-_base_wofs_path = '/home/monte.flora/python_packages/WoF_post'
-_base_mp_path = '/home/monte.flora/python_packages/MontePython'
+_base_wofs_path = '/home/lucas.jones/python_packages/frdd-wofs-post/wofs'
+_base_mp_path = '/home/lucas.jones/python_packages/frdd-monte-python'
 import sys
 sys.path.insert(0,_base_mp_path)
 sys.path.insert(0,_base_wofs_path)
@@ -23,7 +26,7 @@ sys.path.insert(0,_base_wofs_path)
 from monte_python.object_identification import label_per_member
 import monte_python 
 
-from wofs.post.utils import save_dataset, load_yaml
+from wofs.post.utils import save_dataset #, load_yaml. --removed by Lucas
 from wofs.common.zarr import open_dataset, normalize_filename
 from wofs.common import remove_reserved_keys
 
