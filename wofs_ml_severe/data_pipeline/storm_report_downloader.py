@@ -7,13 +7,17 @@ import urllib.request
 import os
 import numpy as np
 import pandas as pd
+import geopandas as gpd
+import shapely
 import re
+import io
 
 class StormReportDownloader:
     """
-    StormReportDownloader downloads STORM EVENT data from multiple years, 
-    concatenates the data into a single dataframe, and then re-formats
-    portions of the data (e.g., converting from local time to UTC time).
+    StormReportDownloader downloads STORM EVENT and warning polygon data 
+    from multiple years, concatenates the data into a single dataframe, 
+    and then re-formats portions of the data (e.g., converting from local 
+    time to UTC time).
     
     Attribute
     ------------
@@ -98,9 +102,67 @@ class StormReportDownloader:
         # download
         urllib.request.urlretrieve(lsr_url, lsr_zipfile)
     
-        cmd = "unzip " + lsr_zipfile + " -d " + outdir 
+        cmd = "unzip " + lsr_zipfile + " -d " + self._outdir 
         os.system(cmd) 
         
+    import requests
+
+    def download_warnings(self, start_date, end_date):
+        """
+        Downloads NWS watch/warning data as a .feather from the Iowa Environmental Mesonet.
+        
+        Args:
+            start_time (str): The start time for the query (e.g., '2023-01-01T00:00Z').
+            end_time (str): The end time for the query (e.g., '2023-01-02T00:00Z').
+            output_filename (str): The name of the file to save the data to.
+        """
+
+        # written by Gemini with edits by Lucas Jones
+
+        output_filename = self._outdir + "warnings_" + start_date[:10] + "_" + end_date[:10] + ".feather"
+        print(output_filename)
+        
+        # Base URL without the query string
+        base_url = "https://mesonet.agron.iastate.edu/cgi-bin/request/gis/watchwarn.py"
+        
+        # We use a dictionary for parameters so the requests library handles 
+        # any necessary URL encoding automatically.
+        params = {
+            "accept": "shapefile",
+            "sts": start_date,
+            "ets": end_date,
+            "timeopt": "1",
+            "limitps": "1",
+            "significance": "W",
+            "limit1": "1"
+        }
+        
+        try:
+            # Send the request
+            print(f"Downloading {base_url}...")
+            response = requests.get(base_url, params = params)
+            
+            # Raise an exception for bad status codes (4xx or 5xx)
+            response.raise_for_status()
+
+            # read raw csv data into memory
+            data = io.BytesIO(response.content)
+
+            gdf = gpd.read_file(data)
+            
+            # Ensure the coordinate reference system is set (usually EPSG:4326 for WGS84)
+            if gdf.crs is None:
+                gdf = gdf.set_crs("EPSG:4326")
+            
+            # Save to Feather (geopandas will automatically write the geo metadata)
+            gdf.to_feather(output_filename)
+
+            #convert the accessed data to a feather file
+            feather = gdf.to_feather(output_filename)
+                            
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred while downloading the file: {e}")
+
     def format_data(self, paths):
         """Combine and re-format the Storm Event CSVs"""
         DTYPE = {'VALID': np.int64, 'LAT':np.float64, 'LON':np.float64, 'BEGIN_YEARMONTH':object, 

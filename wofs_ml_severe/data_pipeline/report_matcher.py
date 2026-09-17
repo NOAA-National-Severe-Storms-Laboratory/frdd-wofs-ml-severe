@@ -61,7 +61,7 @@ class MatchToTracks:
         if min_dists is None:
             min_dists = [0, 1, 2, 5, 10]
         if reports_path is None:
-            reports_path = '/work/mflora/LSRS/STORM_EVENTS_2017-2023.csv'
+            reports_path = '/work2/lucas.jones/LSRS/STORM_EVENTS_2026-2026.csv'
         
         self._min_dists = min_dists
         self.err_window = err_window
@@ -166,12 +166,17 @@ class MatchToTracks:
         final_df = pd.concat([lsr_df, mrms_df, poly_df], axis=1)
      
         final_df['labels'] = labels
+
+        # memory problems, better do some clean up!
+        del lsr_df, mrms_df, poly_df
     
         # Save the data to the MLTARGETS.
         if self.return_df:
             return final_df
         
         target_file = self._save_targets(final_df, track_file)  
+
+        del final_df
         
         return target_file    
     

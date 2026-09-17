@@ -8,14 +8,13 @@ from datetime import timedelta
 class WarningPolygonLoader:
     def __init__(self, wofs_track_file=None, duration=30, err=10, file_path=None, start_time=None):
         if file_path is None:
-            file_path = "/work/mflora/LSRS/2018-2023_nws_warnings_dt.feather"
-        
+            file_path = "/work2/lucas.jones/LSRS/warnings_2026-01-01_2026-09-17.feather"
         self.warn_df = gpd.read_feather(file_path)
         self.warn_df = self.warn_df.copy()
         
         # Convert the "issued_time" column to datetime format, if it's not already.
-        #self.warn_df["ISSUED"] = pd.to_datetime(self.warn_df["ISSUED"])
-        #self.warn_df["EXPIRED"] = pd.to_datetime(self.warn_df["EXPIRED"])
+        self.warn_df["ISSUED"] = pd.to_datetime(self.warn_df["ISSUED"])
+        self.warn_df["EXPIRED"] = pd.to_datetime(self.warn_df["EXPIRED"])
         
         # Limit the dataframe to tornado and severe weather storm-based polygons
         self.warn_df = self.get_storm_based_polygons(self.warn_df)
