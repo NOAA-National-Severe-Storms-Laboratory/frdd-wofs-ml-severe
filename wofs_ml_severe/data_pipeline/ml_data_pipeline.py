@@ -80,33 +80,45 @@ class MLDataPipeline(Emailer):
     # TODO: Add the ensemble storm tracks parameters as an arg for data pipeline.
     # Then add the ensemble storm track parameters to a config file. 
     
-    def __init__(self, dates=None, times = None, previous_method=False,
-                 n_jobs=30, out_path ='/work2/lucas.jones/mpas_wofs/SummaryFiles/', verbose=True):
+    def __init__(self, dates = None, times = None, previous_method = False,
+                 n_jobs=30, out_path ='/work2/lucas.jones/mpas_wofs/SummaryFiles/2026/', verbose=True):
         
         self._BASE_PATH = '/work2/lucas.jones/mpas_wofs/SummaryFiles/2026/'
         self.reports_path = '/work2/lucas.jones/LSRS/STORM_EVENTS_2026-2026.csv'
         self.out_path = out_path 
         self.verbose=verbose
         self.fix_date = True
+        self.valid_years = [2026]
         
         if dates is None:
             # TODO: Make it year based! 
             ##self.dates = [d.split('_')[0] for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
             
-            possible_dates = [d for d in os.listdir(self._BASE_PATH) if '.txt' not in d and 'old' not in d]
-            possible_dates = [d for d in possible_dates if  8 <= len(d) <= 11 ]
+            runs = [d for d in os.listdir(self._BASE_PATH) if int(d[7:11]) in self.valid_years] #if '.txt' not in d and 'old' not in d]
+            #possible_dates = [d for d in possible_dates if  8 <= len(d) <= 11 ]
 
-            possible_dates.sort()
+            '''
+            # accounts for new directory style where each MPAS WoFS case is housed 
+            # in a WOFSRun directory 
+            temp_dates = []
+            for date in runs:
+                temp_dates.append(decompose_file_path(date, file_pattern='WOFSRun', 
+                                                          decompose_path = False)['VALID_DATE']) 
 
-            valid_years = [2026]
-            self.dates = [date for date in possible_dates if int(date[:4]) in valid_years]
+            temp_dates.sort()
+            '''
+
+            self.runs = runs
+            #self.dates = [date for date in temp_dates if int(date[:4]) in self.valid_years]
             
-            self.send_email_bool = True
+            self.send_email_bool = False     #temporary change because this is currently throwing an error, otherwise want this for realtime
             self.times=None
             self._NT = 36
             self.debug=False
         else:
-            self.dates = dates
+            self.runs = [run for run in os.listdir(self._BASE_PATH) 
+                         if run.split('_')[0] in dates]
+            #self.dates = dates
             self.times = times
             self.sample_size = 18 
             self.debug = True
@@ -304,18 +316,33 @@ class MLDataPipeline(Emailer):
     def get_files(self, file_type):
         """Returns a list of all file names of the given file type."""
         paths = []
-        for d in tqdm(self.dates, desc='Getting all files paths for each date:'):
-            path = join(self._BASE_PATH,d)
-            if self.times is None:
-                for (dir_path, _, file_names) in os.walk(path):
-                    file_names = [join(dir_path, f) for f in file_names if file_type in f]
-                    paths.extend(file_names) 
-            else:
-                # For debugging the system. 
-                for t in self.times:
-                    dtry = join(path,t)
-                    file_names = [join(dtry,f) for f in os.listdir(dtry) if file_type in f]
-                    paths.extend(file_names) 
+
+        # additional for loop accounts for the WOFSRun directories
+        for run in tqdm(self.runs, desc='Getting all files paths for each date:'):
+            path = join(self._BASE_PATH, run)
+
+            # now enter the 1+ subdirectories that contain output that cross over to 
+            # the next local calendar day
+            #for d in self.dates:
+            for _, dirs, _ in os.walk(path):
+
+                # verify the dir is a date directory and not "continuous" or "mrms", then
+                # add it to the path
+                for year in self.valid_years:
+                    day_paths = [join(path, dir) for dir in dirs if str(year) in dir]
+
+                    for day in day_paths:
+                        if self.times is None:
+                            for (dir_path, _, file_names) in os.walk(day):
+                                file_names = [join(dir_path, f) for f in file_names if file_type in f]
+                                paths.extend(file_names) 
+
+                        else:
+                            # For debugging the system. 
+                            for t in self.times:
+                                dtry = join(day,t)
+                                file_names = [join(dtry,f) for f in os.listdir(dtry) if file_type in f]
+                                paths.extend(file_names) 
         
         paths.sort()
         

@@ -163,7 +163,13 @@ def decompose_file_path(file_path,
     if file_pattern == 'wofs':
         file_pattern = 'wofs_(\S{3,14})_(\d{2,3})_(\d{8})_(\d{4})_(\d{4}).(nc|json|feather)'
         comp_names = ['TYPE', 'TIME_INDEX', 'VALID_DATE', 'INIT_TIME', 'VALID_TIME', 'FILE_TYPE']
-        
+
+    '''
+    # currently not used
+    elif file_pattern == "WOFSRun":
+        file_pattern = 'WOFSRun(\d{8})-(\w+)'
+        comp_names = ['VALID_DATE', 'ID']
+    '''
         
     if not decompose_path:
         if isPath(file_path):
