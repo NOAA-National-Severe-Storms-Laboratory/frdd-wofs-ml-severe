@@ -27,6 +27,8 @@ from skimage.measure import regionprops
 from tqdm import tqdm 
 import random
 
+import tracemalloc
+
 # Personal Modules
 from ..common.emailer import Emailer
 from ..common.multiprocessing_utils import run_parallel, to_iterator
@@ -109,16 +111,17 @@ class MLDataPipeline(Emailer):
             '''
 
             self.runs = runs
-            #self.dates = [date for date in temp_dates if int(date[:4]) in self.valid_years]
+            self.dates = [date for date in dates if int(date[:4]) in self.valid_years]
             
             self.send_email_bool = False     #temporary change because this is currently throwing an error, otherwise want this for realtime
             self.times=None
             self._NT = 36
             self.debug=False
         else:
-            self.runs = [run for run in os.listdir(self._BASE_PATH) 
-                         if run.split('_')[0] in dates]
-            #self.dates = dates
+            for date in dates:
+                self.runs = [run for run in os.listdir(self._BASE_PATH) 
+                         if run[7:15] == date]
+            self.dates = dates
             self.times = times
             self.sample_size = 18 
             self.debug = True
@@ -148,10 +151,18 @@ class MLDataPipeline(Emailer):
         print('info', '='*50) 
         print('info', '============= STARTING A NEW DATA PIPELINE =============') 
         
+        tracemalloc.start()
+
         # Identify the ensemble storm tracks. 
         if 'get_ensemble_tracks' not in skip:
             print('info', '========== IDENTIFYING THE ENSEMBLE STORM TRACKS =======')
             self.get_ensemble_tracks()
+
+        snapshot = tracemalloc.take_snapshot()
+        top_stats = snapshot.statistics('lineno')
+        print("[ Top 10 memory consuming lines ]")
+        for stat in top_stats[:10]:
+            print(stat)
         
         # Extract the ML features from the ensemble storm tracks.
         if 'get_ml_features' not in skip:
@@ -176,7 +187,7 @@ class MLDataPipeline(Emailer):
         if len(types)==0:
             return None 
         
-        base_path = '/work2/lucas.jones/mpas_wofs/SummaryFiles/'    
+        base_path = '/work2/lucas.jones/mpas_wofs/SummaryFiles/2026/'    
 
         paths = []
         date_paths = [join(self._BASE_PATH, d) for d in os.listdir(base_path)]
@@ -328,8 +339,9 @@ class MLDataPipeline(Emailer):
 
                 # verify the dir is a date directory and not "continuous" or "mrms", then
                 # add it to the path
-                for year in self.valid_years:
-                    day_paths = [join(path, dir) for dir in dirs if str(year) in dir]
+                for date in self.dates:
+                    for year in self.valid_years:
+                        day_paths = [join(path, dir) for dir in dirs if str(year) in dir and date in dir]
 
                     for day in day_paths:
                         if self.times is None:
