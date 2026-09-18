@@ -263,8 +263,8 @@ class MatchToTracks:
         date_rng = pd.date_range(sdate, edate, freq=timedelta(minutes=5))
         
         mrms_filenames = [date.strftime('wofs_MRMS_RAD_%Y%m%d_%H%M.nc') for date in date_rng]
-        mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, self.date, f) for f in mrms_filenames 
-                  if Path(self.MRMS_PATH).joinpath(self.year, self.date, f).is_file()
+        mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, self.date + "_d1", f) for f in mrms_filenames 
+                  if Path(self.MRMS_PATH).joinpath(self.year, self.date + "_d1", f).is_file()
                  ]
     
         return mrms_filepaths 
