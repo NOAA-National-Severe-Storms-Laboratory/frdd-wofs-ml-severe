@@ -27,8 +27,6 @@ from skimage.measure import regionprops
 from tqdm import tqdm 
 import random
 
-import tracemalloc
-
 # Personal Modules
 from ..common.emailer import Emailer
 from ..common.multiprocessing_utils import run_parallel, to_iterator
@@ -96,7 +94,8 @@ class MLDataPipeline(Emailer):
             # TODO: Make it year based! 
             ##self.dates = [d.split('_')[0] for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
             
-            runs = [d for d in os.listdir(self._BASE_PATH) if int(d[7:11]) in self.valid_years] #if '.txt' not in d and 'old' not in d]
+            #Only read in WOFSRun directories within the valid year period
+            runs = [d for d in os.listdir(self._BASE_PATH) if "." not in d and int(d[7:11]) in self.valid_years] #if '.txt' not in d and 'old' not in d]
             #possible_dates = [d for d in possible_dates if  8 <= len(d) <= 11 ]
 
             '''
@@ -111,7 +110,8 @@ class MLDataPipeline(Emailer):
             '''
 
             self.runs = runs
-            self.dates = [date for date in dates if int(date[:4]) in self.valid_years]
+            self.dates = [date[7:15] for date in runs]
+            print(self.dates)
             
             self.send_email_bool = False     #temporary change because this is currently throwing an error, otherwise want this for realtime
             self.times=None
@@ -151,18 +151,10 @@ class MLDataPipeline(Emailer):
         print('info', '='*50) 
         print('info', '============= STARTING A NEW DATA PIPELINE =============') 
         
-        tracemalloc.start()
-
         # Identify the ensemble storm tracks. 
         if 'get_ensemble_tracks' not in skip:
             print('info', '========== IDENTIFYING THE ENSEMBLE STORM TRACKS =======')
             self.get_ensemble_tracks()
-
-        snapshot = tracemalloc.take_snapshot()
-        top_stats = snapshot.statistics('lineno')
-        print("[ Top 10 memory consuming lines ]")
-        for stat in top_stats[:10]:
-            print(stat)
         
         # Extract the ML features from the ensemble storm tracks.
         if 'get_ml_features' not in skip:
@@ -176,7 +168,7 @@ class MLDataPipeline(Emailer):
         if  'match_to_storm_reports' not in skip:
             print('info', '============ MATCHING TRACKS TO STORM REPORTS ===========')
             self.match_to_storm_reports()
-        
+
         # Concatenate data together and create a single dataframe.
         # Also, appends the target dataframes.
         print('info', '============ BUILDING THE FINAL DATASETS ===========') 

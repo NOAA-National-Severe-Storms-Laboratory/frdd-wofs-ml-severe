@@ -15,7 +15,6 @@ from datetime import timedelta, datetime
 import gc 
 from pathlib import Path 
 
-
 class MatchToTracks:
     """
     Match local storm reports, MESH, warning polygons and other
@@ -93,7 +92,9 @@ class MatchToTracks:
         lsr_dataset, lsr_points = self.get_reports(track_file)
         lsr_df = self.object_match(tracks, labels, lsr_dataset, one_to_one=False, 
                      obs_points=lsr_points)
-        
+
+        del lsr_dataset
+
         # ******* MRMS MESH *************
         # Load MESH data and identify tracks. 
         if self.verbose:
@@ -149,6 +150,9 @@ class MatchToTracks:
 
             mrms_df = self.object_match(tracks, labels, mrms_dataset, one_to_one=False)
             mrms_df['max_mesh'] = self.extract_spatial_amplitude(mesh_arr, tracks, labels)
+            del mrms_dataset
+
+        del mesh_arr, 
 
         # ******* NWS WARNING POLYGONS *************
         # Load warnings polygons  TODO
@@ -168,7 +172,7 @@ class MatchToTracks:
         final_df['labels'] = labels
 
         # memory problems, better do some clean up!
-        del lsr_df, mrms_df, poly_df
+        del lsr_df, mrms_df, poly_df, polygon_dataset
     
         # Save the data to the MLTARGETS.
         if self.return_df:

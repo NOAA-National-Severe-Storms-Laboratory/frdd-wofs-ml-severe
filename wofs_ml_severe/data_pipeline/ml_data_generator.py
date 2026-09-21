@@ -492,6 +492,7 @@ class MLDataGenerator:
             # data frames. This ends up being much simpler than before since all of these 
             # are present in the ALL file.
             ds_env = open_dataset(all_file[0], decode_times = False)
+            ds_subset = ds_env[['xlat', 'xlon', 'hgt']]
             ds_ens = xr.open_mfdataset(all_file, concat_dim = 'time', combine = "nested",
                                        decode_times = False)
             try:
@@ -501,6 +502,8 @@ class MLDataGenerator:
             except:
                 print(f"Issue with {all_file}. Likely due to a missing variable.")
                 ds_env.close()
+                ds_ens.close()
+                del ds_env, ds_ens
                 gc.collect()
                 return None
                 
@@ -556,7 +559,9 @@ class MLDataGenerator:
             # Close the netcdf files
             storm_ds.close()
             ds_env.close()
-            del storm_ds, ds_env
+            ds_ens.close()
+            svr_data.close()
+            del storm_ds, ds_env, ds_ens, env_data, svr_data
 
             # Add the run date as metadata. 
             dataframe['Run Date'] = [int(run_date)] * len(dataframe)
@@ -604,6 +609,8 @@ class MLDataGenerator:
 
                 return [save_df_file, explain_fname] + generated_files
 
+            del dataframe, ds_subset
+
             return [save_df_file] + generated_files
 
         else:
@@ -618,9 +625,10 @@ class MLDataGenerator:
                 generated_files.extend(mlprob_file)
                 
                 ds_env.close()
+                del ds_env, ds_subset
                 gc.collect()
-                del ds_env
         
+        del storm_objects, intensity_img, updraft_tracks
         gc.collect()
         
         return generated_files

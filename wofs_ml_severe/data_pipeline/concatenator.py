@@ -36,17 +36,6 @@ class Concatenator():
     def __call__(self, ml_files, out_path,  fix_date=True): 
     
         # Generate the full dataframe. 
-        # TEMP.
-        try:
-            ml_files.remove('/work/mflora/SummaryFiles/20170502/0100/wofs_MLDATA_24_20170503_0230_0300.feather')
-        except:
-            print('Could not remove file from ml_files')
-            
-        try:
-            ml_files.remove('/work/mflora/SummaryFiles/20180630/1800/wofs_MLDATA_45_20180630_2115_2145.feather')
-        except:
-            print('Could not remove file from ml_files')
-
         full_dataframe = self.generate_dataset(ml_files)
    
         for name, rng in tqdm(zip(self.TIME_NAMES, self.TIME_RANGES), desc='Saving datasets'): 
@@ -65,7 +54,11 @@ class Concatenator():
             # Save the reduced dataset.
            
             this_df_fixed.to_feather(join(out_path, f'wofs_ml_severe__{name}__reduced_data.feather'))
-    
+
+            del this_df, this_df_fixed
+
+        del full_dataframe
+        
     def get_numeric_init_time(self, X):
         """Convert init time (str) to number of hours after midnight. 
         WoFS extends into the next day, so hours <=12, add 24 hrs. 

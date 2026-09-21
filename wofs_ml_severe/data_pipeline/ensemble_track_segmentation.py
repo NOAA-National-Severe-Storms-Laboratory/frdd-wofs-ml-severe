@@ -217,6 +217,7 @@ def generate_ensemble_track_file(ncfile, outdir=None, overwrite=True,
     
     # Close the dataset. 
     ds.close()
+    del ds
     
     # Save the dataset.
     save_filename = kwargs.pop('output_file', 
