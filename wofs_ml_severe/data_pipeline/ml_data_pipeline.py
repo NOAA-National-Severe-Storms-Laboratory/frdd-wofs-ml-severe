@@ -18,6 +18,7 @@ import itertools
 import traceback
 import logging 
 from pathlib import Path
+import re
 
 # Third-party modules
 import pandas as pd 
@@ -110,8 +111,7 @@ class MLDataPipeline(Emailer):
             '''
 
             self.runs = runs
-            self.dates = [date[7:15] for date in runs]
-            print(self.dates)
+            #self.dates = [date[7:15] for date in runs]
             
             self.send_email_bool = False     #temporary change because this is currently throwing an error, otherwise want this for realtime
             self.times=None
@@ -121,13 +121,13 @@ class MLDataPipeline(Emailer):
             for date in dates:
                 self.runs = [run for run in os.listdir(self._BASE_PATH) 
                          if run[7:15] == date]
-            self.dates = dates
+            #self.dates = dates
             self.times = times
             self.sample_size = 18 
             self.debug = True
             self._NT = 2
             self.send_email_bool = False
-        
+
         self._runtype = 'rto'
         self.n_jobs = n_jobs
         
@@ -280,6 +280,23 @@ class MLDataPipeline(Emailer):
         
         # Get the filenames. 
         filenames = self.files_to_run(original_type='ENSEMBLETRACKS', new_type = 'MLTARGETS')
+
+        # extract the domain from the WOFSRun directory in case of multiple domains
+        domains = []
+
+        for file in filenames:
+            parts = Path(file).parts
+                
+            for part in parts:
+                if part.startswith("WOFSRun"):
+                    # extract the domain number
+                    match = re.search(r'd\d$', part)
+            
+            if match:
+                domains.append(match.group())
+                break
+
+        print(domains)
         
         if self.debug: 
        
@@ -298,7 +315,7 @@ class MLDataPipeline(Emailer):
                                      verbose=False
                                     ),
                 nprocs_to_use = self.n_jobs,
-                args_iterator = to_iterator(filenames),
+                args_iterator = to_iterator(filenames, domains),
                 description='Matching Reports to Tracks'
                 )
         
@@ -321,7 +338,7 @@ class MLDataPipeline(Emailer):
         paths = []
 
         # additional for loop accounts for the WOFSRun directories
-        for run in tqdm(self.runs, desc='Getting all files paths for each date:'):
+        for run in tqdm(self.runs, desc='Getting all file paths for each date:'):
             path = join(self._BASE_PATH, run)
 
             # now enter the 1+ subdirectories that contain output that cross over to 
@@ -331,9 +348,9 @@ class MLDataPipeline(Emailer):
 
                 # verify the dir is a date directory and not "continuous" or "mrms", then
                 # add it to the path
-                for date in self.dates:
-                    for year in self.valid_years:
-                        day_paths = [join(path, dir) for dir in dirs if str(year) in dir and date in dir]
+                #for date in self.dates:
+                for year in self.valid_years:
+                    day_paths = [join(path, dir) for dir in dirs if str(year) in dir] #and date in dir]
 
                     for day in day_paths:
                         if self.times is None:

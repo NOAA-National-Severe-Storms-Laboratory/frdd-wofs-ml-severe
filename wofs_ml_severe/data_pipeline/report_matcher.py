@@ -74,7 +74,7 @@ class MatchToTracks:
         self.match_to_reports = False
         self.verbose=verbose
 
-    def __call__(self, track_file):
+    def __call__(self, track_file, domain):
         
         results = self._load_wofs_tracks(track_file)
         if results is None:
@@ -99,7 +99,7 @@ class MatchToTracks:
         # Load MESH data and identify tracks. 
         if self.verbose:
             print('Matching to MESH...') 
-        mesh_arr = self.load_mrms(track_file)
+        mesh_arr = self.load_mrms(track_file, domain)
                     
         # If the MESH doesn't load, return empty data
         if mesh_arr is None:
@@ -258,7 +258,7 @@ class MatchToTracks:
     
         return sdate, edate 
 
-    def find_mrms_files(self):
+    def find_mrms_files(self, domain):
         """
         When given a start and end date, this function will find any MRMS RAD 
         files between those time periods. It will check if the path exists. 
@@ -267,13 +267,21 @@ class MatchToTracks:
         date_rng = pd.date_range(sdate, edate, freq=timedelta(minutes=5))
         
         mrms_filenames = [date.strftime('wofs_MRMS_RAD_%Y%m%d_%H%M.nc') for date in date_rng]
-        mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, self.date + "_d1", f) for f in mrms_filenames 
-                  if Path(self.MRMS_PATH).joinpath(self.year, self.date + "_d1", f).is_file()
-                 ]
+        mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, self.date + "_" + domain, f) for f in mrms_filenames 
+                  if Path(self.MRMS_PATH).joinpath(self.year, self.date + "_" + domain, f).is_file()]
+
+        # Messy fix to problem where radar data for a case is stored in a single directory
+        # with the first day as the directory name. This is opposite to WoFS output which 
+        # has separate directories for each day, hence the rough fix.
+        if mrms_filepaths == []:
+            print([Path(self.MRMS_PATH).joinpath(self.year, str(int(self.date)-1) + "_" + domain, f) for f in mrms_filenames])
+            mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, str(int(self.date)-1) + "_" + domain, f) 
+                              for f in mrms_filenames if Path(self.MRMS_PATH).joinpath(
+                                  self.year, str(int(self.date)-1) + "_" + domain, f).is_file()]
     
         return mrms_filepaths 
     
-    def load_mrms(self, ncfile):
+    def load_mrms(self, ncfile, domain):
         # Load the file for the 30-min+ and concate along time dim.
         
         # Get the beginning of the 30-min period for the ENSEMBLETRACK file.
@@ -282,7 +290,7 @@ class MatchToTracks:
         self.date = Path(ncfile).parent.parent.stem
         
         try:
-            files = self.find_mrms_files()
+            files = self.find_mrms_files(domain)
         except Exception as e:
             print(f'Issues finding MRMS MESH files for {self.sdate}! {traceback.format_exc()}')
             return None
