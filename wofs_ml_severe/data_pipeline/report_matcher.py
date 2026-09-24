@@ -265,19 +265,22 @@ class MatchToTracks:
         """
         sdate, edate = self.dt_rng()
         date_rng = pd.date_range(sdate, edate, freq=timedelta(minutes=5))
+
+        fcs_date = datetime.strptime(self.date, "%Y%m%d")
         
         mrms_filenames = [date.strftime('wofs_MRMS_RAD_%Y%m%d_%H%M.nc') for date in date_rng]
-        mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, self.date + "_" + domain, f) for f in mrms_filenames 
-                  if Path(self.MRMS_PATH).joinpath(self.year, self.date + "_" + domain, f).is_file()]
+        mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, fcs_date.strftime("%Y%m%d") + "_" + domain, f) for f in mrms_filenames 
+                  if Path(self.MRMS_PATH).joinpath(self.year, fcs_date.strftime("%Y%m%d") + "_" + domain, f).is_file()]
 
         # Messy fix to problem where radar data for a case is stored in a single directory
         # with the first day as the directory name. This is opposite to WoFS output which 
-        # has separate directories for each day, hence the rough fix.
+        # has separate directories for each day so it is difficult to extract the true initialization
+        # from any one file name, hence the messy fix. THIS WILL BREAK IF A RUN IS OVER MORE THAN
+        # TWO CALENDAR DAYS!!!!
         if mrms_filepaths == []:
-            print([Path(self.MRMS_PATH).joinpath(self.year, str(int(self.date)-1) + "_" + domain, f) for f in mrms_filenames])
-            mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, str(int(self.date)-1) + "_" + domain, f) 
-                              for f in mrms_filenames if Path(self.MRMS_PATH).joinpath(
-                                  self.year, str(int(self.date)-1) + "_" + domain, f).is_file()]
+            mrms_filepaths = [Path(self.MRMS_PATH).joinpath(self.year, (fcs_date - timedelta(days=1)).strftime("%Y%m%d") + "_" + domain, f) 
+                              for f in mrms_filenames if Path(self.MRMS_PATH).joinpath(self.year, 
+                                  (fcs_date - timedelta(days=1)).strftime("%Y%m%d") + "_" + domain, f).is_file()]
     
         return mrms_filepaths 
     
@@ -297,6 +300,7 @@ class MatchToTracks:
         
         # Check if at least half the expected files exist.
         if len(files) <= int(self.n_expected_files/2):
+            print(files)
             print(f'Half of the files are missing for {self.sdate}!')
             return None
         

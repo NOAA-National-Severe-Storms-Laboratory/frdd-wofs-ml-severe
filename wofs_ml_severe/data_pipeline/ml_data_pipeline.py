@@ -24,15 +24,13 @@ import re
 import pandas as pd 
 import xarray as xr 
 import numpy as np 
-from skimage.measure import regionprops
 from tqdm import tqdm 
 import random
 
 # Personal Modules
 from ..common.emailer import Emailer
 from ..common.multiprocessing_utils import run_parallel, to_iterator
-from ..common.util import decompose_file_path, save_dataset
-from ..io.io import MLDataLoader
+from ..common.util import decompose_file_path 
 
 from .ensemble_track_segmentation import generate_ensemble_track_file
 from .ml_data_generator import MLDataGenerator
@@ -93,26 +91,11 @@ class MLDataPipeline(Emailer):
         
         if dates is None:
             # TODO: Make it year based! 
-            ##self.dates = [d.split('_')[0] for d in os.listdir(self._BASE_PATH) if '.txt' not in d]
             
             #Only read in WOFSRun directories within the valid year period
             runs = [d for d in os.listdir(self._BASE_PATH) if "." not in d and int(d[7:11]) in self.valid_years] #if '.txt' not in d and 'old' not in d]
-            #possible_dates = [d for d in possible_dates if  8 <= len(d) <= 11 ]
 
-            '''
-            # accounts for new directory style where each MPAS WoFS case is housed 
-            # in a WOFSRun directory 
-            temp_dates = []
-            for date in runs:
-                temp_dates.append(decompose_file_path(date, file_pattern='WOFSRun', 
-                                                          decompose_path = False)['VALID_DATE']) 
-
-            temp_dates.sort()
-            '''
-
-            self.runs = runs
-            #self.dates = [date[7:15] for date in runs]
-            
+            self.runs = runs            
             self.send_email_bool = False     #temporary change because this is currently throwing an error, otherwise want this for realtime
             self.times=None
             self._NT = 36
@@ -121,7 +104,6 @@ class MLDataPipeline(Emailer):
             for date in dates:
                 self.runs = [run for run in os.listdir(self._BASE_PATH) 
                          if run[7:15] == date]
-            #self.dates = dates
             self.times = times
             self.sample_size = 18 
             self.debug = True
@@ -295,8 +277,6 @@ class MLDataPipeline(Emailer):
             if match:
                 domains.append(match.group())
                 break
-
-        print(domains)
         
         if self.debug: 
        
