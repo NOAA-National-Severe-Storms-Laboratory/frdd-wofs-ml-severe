@@ -467,11 +467,13 @@ class MLDataLoader:
             if any([n in f for n in ['uh', 'wz']]) and 'instant' not in f:
                 drop_vars.append(f)
 
-            # TODO I see no reasons these could not be included for MPAS WoFS
+            # TODO I see no reasons these could not be included for MPAS WoFS. Original Comment:
             # The mixed layer computations changed in 2023 to fix a known bug. Unfortunately, 
             # since we cannot reprocess the prior summary files. We have to remove these features.
+            '''
             if any([v in f for v in ['cape_ml', 'cin_ml', 'lcl_ml', 'cape_mu', 'cin_mu', 'lcl_mu']]):
                 drop_vars.append(f)
+            '''
             
         X.drop(drop_vars, axis=1, inplace=True)
     
@@ -638,6 +640,7 @@ class HailSizeLoader:
     
 #####################################################################################    
 # LEGACY CODE......................
+'''
 class IO:
     
     INFO = ['forecast_time_index', 'obj_centroid_x', 'obj_centroid_y', 'Run Date', 'label']
@@ -891,4 +894,4 @@ def load_ml_data(target_col,
     else:
         return X,y, metadata     
         
-  
+  '''
