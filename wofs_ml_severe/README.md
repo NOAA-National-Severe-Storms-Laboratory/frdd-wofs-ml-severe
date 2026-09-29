@@ -31,7 +31,7 @@ the operational WoFS-ML-Severe (`ml_data_generator.py`)
   - `storm_based_feature_extracter.py`: compute storm object features.
   - `report_matcher.py`: associate storm objects with storm reports.
   - `ml_2to6_data_pipeline.py`: special 2-6hr dataset variant.
-  - `storm_report_downloader.py`: automated downloading of SPC reports.
+  - `storm_report_downloader.py`: automated downloading of SPC reports and NWS warnings.
 
 ### evaluate/
 - `metrics.py`: evaluation metrics and scoring functions (e.g., reliability, performance diagrams).
