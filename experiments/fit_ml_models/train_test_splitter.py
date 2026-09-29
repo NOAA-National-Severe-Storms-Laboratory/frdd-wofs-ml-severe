@@ -14,6 +14,7 @@ from os.path import join
 import pandas as pd
 import random
 from sklearn.model_selection import train_test_split
+import json
 
 def train_test_splitter(months =['April', 'May', 'June', 'July'],
                         test_size=0.3, baseline = True):
@@ -25,7 +26,6 @@ def train_test_splitter(months =['April', 'May', 'June', 'July'],
     """
 
     BASE_PATH = '/work2/lucas.jones/ml_data/'
-    OUT_PATH = '/work2/lucas.jones/ml_data/'
     
     for time in tqdm(['first_hour', 'second_hour', 'third_hour', 'fourth_hour']):
         path = join(BASE_PATH, f'wofs_ml_severe__{time}__data.feather')
@@ -41,7 +41,17 @@ def train_test_splitter(months =['April', 'May', 'June', 'July'],
         all_dates = list(df['Run Date'].unique())
         random.shuffle(all_dates)
         train_dates, test_dates = train_test_split(all_dates, test_size=test_size)
+
+        train_json = json.dumps(train_dates, indent = 0)
+        test_json = json.dumps(test_dates, indent = 0)
+
+        with open(join(BASE_PATH, f'wofs_ml_severe__{time}__training_dates.json'), "w") as file:
+            file.write(train_json)
+
+        with open(join(BASE_PATH, f'wofs_ml_severe__{time}__testing_dates.json'), "w") as file:
+            file.write(test_json)
     
+        '''
         train_df = df[df['Run Date'].isin(train_dates)] 
         test_df  = df[df['Run Date'].isin(test_dates)] 
     
@@ -77,6 +87,7 @@ def train_test_splitter(months =['April', 'May', 'June', 'July'],
 
         else:
             print("Note: baseline train/test split not activated")
+        '''
 
 # switch to determine if baseline splitting should be performed also
 baseline = False

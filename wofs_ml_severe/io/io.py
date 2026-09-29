@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import random
 import json
+from tqdm import tqdm 
 
 from importlib_resources import files
 
@@ -104,7 +105,11 @@ class MLDataLoader:
     # These are the init times to keep. It ignores init times from 1700-1900 (not inclusive). 
     # These are the standard init times used during the spring cases. 
     INIT_TIMES = ['0000', '0030', '0100', '0130', 
-                  '0200', '0230', '0300', '1900', 
+                  '0200', '0230', '0300', '1100', 
+                  '1130', '1200', '1230', '1300',
+                  '1330', '1400', '1430', '1500',
+                  '1530', '1600', '1630', '1700',
+                  '1730', '1800', '1830', '1900', 
                   '1930', '2000', '2030', '2100',
                   '2130', '2200', '2230', '2300', 
                   '2330']
@@ -115,8 +120,8 @@ class MLDataLoader:
     def __init__(self, target_column=None, lead_time='first_hour',  mode='training', 
                  return_full_dataframe = False, load_reduced_dataframe=True, 
                  load_baseline_dataframe=False, 
-                 data_path = '/work2/lucas.jones/mpas-wofs/', 
-                 random_state=123, 
+                 data_path = '/work2/lucas.jones/mpas-wofs/SummaryFiles/2026', 
+                 random_state=123, test_size = 0.3,
                  months = ['April', 'May', 'June'],
                  years = [2026], 
                  exclude_missing_mesh=False, 
@@ -135,6 +140,7 @@ class MLDataLoader:
         self.lead_time = lead_time
         self.mode = self.get_mode(mode) 
         self.random_state = random_state
+        self.test_size = test_size
 
         self.data_path = data_path
         self.alter_init_times = alter_init_times
@@ -232,41 +238,27 @@ class MLDataLoader:
         dataframe.reset_index(inplace=True, drop=True) 
     
         return dataframe
-    def _train_test_split(self, dataframe, return_dates=False):
-        """Code for the train/test splitting. """
-        months_str = f"months:{'_'.join(self.months)}"
-        years = [str(y) for y in self.years]
-        years_str = f"years:{'_'.join(years)}"
-        fname = f"train_test_case_split_{years_str}_{months_str}_rs:{self.random_state}.json"
-    
-        # Get the directory of the current file (my_module.py)
-        dir_path = dirname(realpath(__file__))
-    
-        fname = join(dir_path, fname)
-        
-        if not exists(fname):
-            raise FileNotFoundError(f"""{fname} not found! 
+
+    def split_data(self, dataframe):
+        """Read in the randomly selected dates for the train test split'
+        and divide the data using the dates"""
+
+        filename = join(self.data_path, f"wofs_ml_severe__{self.lead_time}__{self.mode}_dates.json")
+
+        if not exists(filename):
+            raise FileNotFoundError(f"""{filename} not found! 
                                     Check that this file exist for the 
                                     given years : {self.years}, months : {self.months}, and 
                                     random state : {self.random_state}. If not, create with the 
-                                    'create_date_based_train_test_split.ipynb' in the fit_ml_models dir""")
+                                    'train_test_splitter.py' in the fit_ml_models dir""")
             
-        with open(fname, "r") as file:
+        with open(filename, "r") as file:
             date_dict = json.load(file)
-            
-        return date_dict
-    
-    def split_data(self, dataframe):
-        """Perform the training or testing split of the data. 
-        The train/test split determined randomly by WoFS run date."""
         
-        cases_split = self._train_test_split(dataframe, True)
- 
-        these_dates = cases_split[f'{self.mode}_dates']
-        dataframe = self.resample_by_date(dataframe, these_dates)
+        dataframe = self.resample_by_date(dataframe, date_dict)
         
         return dataframe
-        
+    
     def resample_by_date(self, dataframe, dates):
         """Using a list of dates, resample the dataframe"""
         existing_dates = dataframe['Run Date'].apply(str)
@@ -326,10 +318,10 @@ class MLDataLoader:
                 file_path = join(self.data_path, f'wofs_ml_severe__{lead_time}__data.feather')
             
                 if self._load_baseline:
-                    file_path = file_path.replace('data', 'baseline_data')
+                    file_path = file_path.replace('__data', '__baseline_data')
                 
                 if self._load_reduced:
-                    file_path = file_path.replace('data', 'reduced_data')
+                    file_path = file_path.replace('__data', '__reduced_data')
 
                 df = pd.read_feather(file_path)
                 dataframes.append(df)
@@ -345,10 +337,10 @@ class MLDataLoader:
             file_path = join(self.data_path, f'wofs_ml_severe__{self.lead_time}__data.feather')
         
             if self._load_baseline:
-                file_path = file_path.replace('data', 'baseline_data')
+                file_path = file_path.replace('__data', '__baseline_data')
             
             if self._load_reduced:
-                file_path = file_path.replace('data', 'reduced_data')
+                file_path = file_path.replace('__data', '__reduced_data')
 
             return pd.read_feather(file_path)
         
