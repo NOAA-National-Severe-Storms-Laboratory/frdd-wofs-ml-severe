@@ -86,9 +86,8 @@ class MLDataLoader:
     SPATIAL_TXT = 'spatial_mean'
     AMP_TXT = 'amp_ens'
     
-    OBJECT_FEATURES = ['area','eccentricity', 'extent', 'orientation',
-                       'minor_axis_length', 'major_axis_length', 'ens_track_prob',
-                       'area_ratio']
+    OBJECT_FEATURES = ['area', 'minor_axis_length', 'major_axis_length', 'ens_track_prob',
+                       'area_ratio']     #'eccentricity', 'extent', 'orientation',
     
     METADATA_FEATURES = ['Run Date', 'forecast_time_index', 
                          'Initialization Time', 'label', 
@@ -120,7 +119,7 @@ class MLDataLoader:
     def __init__(self, target_column=None, lead_time='first_hour',  mode='training', 
                  return_full_dataframe = False, load_reduced_dataframe=True, 
                  load_baseline_dataframe=False, 
-                 data_path = '/work2/lucas.jones/mpas-wofs/SummaryFiles/2026', 
+                 data_path = '/work2/lucas.jones/ml_data/', 
                  random_state=123, test_size = 0.3,
                  months = ['April', 'May', 'June'],
                  years = [2026], 
@@ -357,7 +356,8 @@ class MLDataLoader:
     
         features = spatial_features + amp_features + self.OBJECT_FEATURES 
         
-        return dataframe[features]
+        #explicit deep copy so original dataframe remains untouched by changes to X
+        return dataframe[features].copy(deep = True)
     
     def get_y(self, dataframe, target_column):
         """Using the given target column, get the y from the parent dataframe"""

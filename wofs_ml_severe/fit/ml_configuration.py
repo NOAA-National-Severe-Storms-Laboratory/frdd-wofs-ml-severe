@@ -201,7 +201,7 @@ ml_config = {
             "alpha": [0.0001, 0.001, 0.01, 0.1, 1.0, 10, 100],
             "l1_ratio": [0, 0.0001, 0.001, 0.01, 0.1, 1.0],
         },
-        "n_jobs": 60,
+        "n_jobs": 1,
         "n_iter": 100,
         "patience": 20
     },
@@ -211,22 +211,54 @@ ml_config = {
         "model": XGBRegressor,
         "model_params": {
             "seed": 123,
-            "tree_method": "gpu_hist",
-            "gpu_id": 0,
-            "sampling_method": "gradient_based", 
-            #"objective" : 'reg:squaredlogerror'
+            "tree_method": "hist",
+            "device": "cuda:1",
+            "sampling_method": "gradient_based",      #, "uniform"
+            "n_jobs": 32,      # ensures CPU threads used in parallel with GPU are also limited
+            "max_bin": 64
         },
-        "search_space": {},
+        "search_space": {
+            "n_estimators": [50, 100, 150, 200],
+            "max_depth": [3,5,7,9],
+            "subsample": [0.5, 0.8, 0.9],   # 1.0does not work for gradient based
+            "reg_alpha": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+            "reg_lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
+            "min_child_weight": [1,3,5,7],
+        },
         "n_jobs": 1,
         "n_iter": 100,
         "patience": 20
     },
     
+    "XGBClassifier": {
+        "model": XGBClassifier,
+        "model_params": {
+            "objective": "binary:logistic",
+            "seed": 123,
+            "tree_method": "hist",
+            "device": "cuda:1",
+            "sampling_method": "gradient_based",      #, "uniform"
+            "n_jobs": 32,     # ensures CPU threads used in parallel with GPU are limited
+            "max_bin": 64
+
+        },
+        "search_space": {
+            "n_estimators": [50, 100, 150, 200],
+            "max_depth": [3,5,7,9],
+            "subsample": [0.5, 0.8, 0.9],   #1.0 does not work for gradient based
+            "reg_alpha": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+            "reg_lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
+            "min_child_weight": [1,3,5,7],
+        },
+        "n_jobs": 1,
+        "n_iter": 100,
+        "patience": 20
+    },    
     
     "RFClassifier": {
         "model": RandomForestClassifier,
         "model_params": {
-            "n_jobs": -1,
+            "n_jobs": 32,
             "random_state": 123
         },
         "search_space": {
@@ -237,7 +269,7 @@ ml_config = {
             "min_samples_leaf": [2, 4, 5, 10, 15, 20, 25, 50],
             "class_weight": ["balanced", None]
         },
-        "n_jobs": 1,
+        "n_jobs": 32,
         "n_iter": 100,
         "patience": 20
     },
@@ -277,28 +309,7 @@ ml_config = {
         "n_iter": 100,
         "patience": 20
     },
-    
-    "XGBClassifier": {
-        "model": XGBClassifier,
-        "model_params": {
-            "objective": "binary:logistic",
-            "seed": 123,
-            "tree_method": "gpu_hist",
-            "gpu_id": 0
-        },
-        "search_space": {
-            "n_estimators": [50, 100, 150, 200],
-            "max_depth": [3,5,7,9],
-            "subsample": [0.5, 0.8, 1.0],
-            "alpha": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
-            "lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
-            "sampling_method": ["uniform", "gradient_based"],
-            "min_child_weight": [1,3,5,7],
-        },
-        "n_jobs": 1,
-        "n_iter": 100,
-        "patience": 5
-    },
+
     
     "NNRegressor": {
         "model": MLPRegressor,
@@ -348,15 +359,23 @@ class MLConfiguration:
     
     @classmethod
     def get_scorer(self, target_type):
+        import gc
         
         if target_type == 'classification':
         
             def scorer(estimator, X, y):
                 pred = estimator.predict_proba(X)[:,1]
+                gc.collect()
+
+                # prevent NANs from being returned in the case of 0 events in a fold
+                if np.sum(y) == 0:
+                    return 0.0
+                
                 return -average_precision_score(y, pred)
         else:
             def scorer(estimator, X, y):
                 pred = estimator.predict(X)
+                gc.collect()
                 return mean_squared_error(y, pred)
             
         return scorer 

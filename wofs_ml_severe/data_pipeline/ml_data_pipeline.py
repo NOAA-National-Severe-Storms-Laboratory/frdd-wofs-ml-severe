@@ -80,7 +80,7 @@ class MLDataPipeline(Emailer):
     # Then add the ensemble storm track parameters to a config file. 
     
     def __init__(self, dates = None, times = None, previous_method = False,
-                 n_jobs=30, out_path ='/work2/lucas.jones/mpas_wofs/SummaryFiles/2026/', verbose=True):
+                 n_jobs=30, out_path ='/work2/lucas.jones/ml_data/', verbose=True):
         
         self._BASE_PATH = '/work2/lucas.jones/mpas_wofs/SummaryFiles/2026/'
         self.reports_path = '/work2/lucas.jones/LSRS/STORM_EVENTS_2026-2026.csv'

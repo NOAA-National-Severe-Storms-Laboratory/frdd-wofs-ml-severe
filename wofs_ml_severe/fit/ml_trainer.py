@@ -2,28 +2,84 @@ from os.path import join, exists
 import os
 import itertools
 import multiprocessing as mp 
-import numpy as np
+from datetime import datetime
+import traceback
+import gc
 
 # The custom classifier 
 import sys
 sys.path.insert(0, '/home/lucas.jones/frdd-wofs-ml-severe')
 sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-ml-workflow')
-sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-WoF_post')
+sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-wofs-post')
 
 from ..common.emailer import Emailer 
 from ..io.io import MLDataLoader
-
-from ml_workflow import TunedEstimator 
-from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
-
-from datetime import datetime
-import traceback
-from numba import cuda
-import gc
-
 from .ml_configuration import MLConfiguration
+from ml_workflow import TunedEstimator 
+
+from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
+import numpy as np
+
+'''
+# prevent multiprocessing and threading deadlocks
+try:
+    mp.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
+'''
 
 class MLTrainer:
+    """
+    This class trains a variety of ML models for different hazards, lead times, and target
+    variables for the ML Severe post processing tool. Baselines using certain baseline variables
+    are also trained using logist regression. 
+
+    Parameters
+    -------------------
+    outpath : str (default is '/work2/lucas.jones/ml_models/')
+        The location where the trained ML models are saved.
+
+    calibrate : bool (default is False)
+        Controls whether the final classification models are calibrated using isotonic
+        regression.
+
+    hyopt_tune : bool (default is False)
+        Controls whether hyperparameter tuning is performed for the ML models. 
+
+    ensemble_calibration : bool (default is False)
+        Controls whether the final classification model calibration is performed using an 
+        ensemble mean of calibration classifiers fit to each fold of the cross validation.
+
+    scaler : str (default is "standard")
+        Determines the scaler used in the preprocessing pipeline.
+
+    overwrite : bool (default is False)
+        Whether to retrain and then overwrite previously trained models.
+
+    debug : bool (default is False)
+        Whether to train on a small subset of the data for testing purposes.
+
+    file_log : str (default is None)
+        A string to include at the end of the filename for the trained ML model. This can 
+        help differentiate different training configurations.
+
+    scorer : str (default is None)
+        The scoring metric used for hyperparameter optimization. The default is average precision 
+        for classification models, negative RMSE for regression models, or the scoring metric 
+        specified in the configuration file that is fetched for that model. Otherwise, the user may
+        specify a desired scoring metric.
+
+    hyperopt_optimizer : str (default is None)
+        The hyperparameter optimizer to use. The default is grid search for models with a small search
+        space and TPE for model with a large search space. The user can specify a different optimizer.
+
+    loader_kws : dict (default is None)
+        A dictionary of keyword arguments used by the data loader.
+
+    Attributes
+    ---------------
+    
+    """
     
     BASELINE_VARS = ['uh_2to5_instant__time_max__amp_ens_mean_spatial_perc_90',
            'ws_80__time_max__amp_ens_mean_spatial_perc_90',
@@ -47,21 +103,21 @@ class MLTrainer:
                         'ExplainableBoostingRegressor']
     
     CLASS_MODELS = ['LogisticRegression', 'BaselineClass',  'XGBClassifier', 'NNClassifier', 
-                   'ExplainableBoostingClassifier']
+                   'ExplainableBoostingClassifier', 'RFClassifier']
     
     IS_KERAS_MODEL = ['NNRegressor', 'NNClassifier']
     
     
-    def __init__(self, outpath='/work/mflora/ML_DATA/NEW_ML_MODELS', 
+    def __init__(self, outpath='/work2/lucas.jones/ml_models/', 
                  calibrate=False, hyopt_tune=False, ensemble_calibration=False, 
                  scaler='standard',  overwrite=False, 
                  debug=False, file_log=None, scorer=None, hyperopt_optimizer=None,
                 loader_kws= {
-                             'data_path' :  '/work/mflora/ML_DATA/DATA/',
+                             'data_path' :  '/work2/lucas.jones/ml_data/',
                              'return_full_dataframe': False, 
                              'random_state' : 123, 
                              'months' : ['April', 'May', 'June'],
-                             'years' : [2018, 2019, 2020, 2021, 2022],  
+                             'years' : [2026],  
                              'mode' : 'training'
                             }):
         
@@ -84,59 +140,63 @@ class MLTrainer:
         """Train the ML pipeline"""
         # The multiprocessing is neccesary to free up the GPU space
         # when training the XGBoost and NeuralNetwork models.
-        self.sample_weight=sample_weight
-        def fitting():
-            self.is_keras = self.is_keras_model(model_name)
-            self.target_type = self.get_target_type(model_name)
-            
-            if self.target_type == 'regression' and self.calibrate:
-                self.calibrate = False 
-                print('Setting calibrate=False as it can only be applied to Classification Models')
 
-            start_time = self.emailer.get_start_time()
-            # Build a file path for the ML model and the hyperopt results. 
-            ml_fname = self.get_filename(self.outpath, model_name, target, lead_time, ext='joblib')
-            subject = self.get_email_subject(model_name, target, lead_time, ml_fname)
-            hyp_path = join(self.outpath, 'hyperopt_results')
-            hyp_fname = self.get_filename(hyp_path, model_name, target, lead_time, ext='json')
-            
-            
-            if not self.overwrite:
-                if exists(ml_fname):
-                    return None
-                
-            # Get the configuration params for the ML models.
-            config = MLConfiguration.get_config(model_name)
-            
-            # Load the ML Data.
-            X, y, metadata = self.load_data(model_name, target, lead_time)
+        # Use "spawn" to prevent OpenMP and CUDA from deadlocking memory
+        ctx = mp.get_context("spawn")
 
-            # Get the CV params 
-            cv, groups = self.get_cv_params(X,y,metadata)
-        
-            # Get HPO, pipeline, and calibration params
-            hyperopt_kwargs = self.get_hyperopt_kws(model_name, cv, config, hyp_fname)
-            pipeline_kwargs = self.get_pipeline_kws()
-            calibration_cv_kwargs = self.get_calibration_kws(cv, config)
-        
-            if self.sample_weight:
-                sample_weight = self.get_sample_weight(y)
-            else:
-                sample_weight = None
-        
-            result = self.fit_and_save(X, y, groups, sample_weight, config, hyperopt_kwargs, 
-                              pipeline_kwargs, calibration_cv_kwargs, ml_fname)
-        
-            if result:
-                try:
-                    self.emailer.send_email(subject, start_time)
-                except:
-                    print('Unable to send email. Possibly an NSSL network issue.')
-        
-        fitting_process = mp.Process(target=fitting)
+        fitting_process = ctx.Process(target = self.fitting, 
+                                      args = (model_name, target, lead_time, sample_weight))
         fitting_process.start()
         fitting_process.join()
-    
+
+    def fitting(self, model_name, target, lead_time, sample_weight=False):
+        self.sample_weight = sample_weight
+        self.is_keras = self.is_keras_model(model_name)
+        self.target_type = self.get_target_type(model_name)
+        
+        if self.target_type == 'regression' and self.calibrate:
+            self.calibrate = False 
+            print('Setting calibrate=False as it can only be applied to Classification Models')
+
+        start_time = self.emailer.get_start_time()
+
+        # Build a file path for the ML model and the hyperopt results. 
+        ml_fname = self.get_filename(self.outpath, model_name, target, lead_time, ext='joblib')
+        subject = self.get_email_subject(model_name, target, lead_time, ml_fname)
+        hyp_path = join(self.outpath, 'hyperopt_results')
+        hyp_fname = self.get_filename(hyp_path, model_name, target, lead_time, ext='json')
+        
+        if not self.overwrite and exists(ml_fname):
+            return None
+            
+        # Get the configuration params for the ML models.
+        config = MLConfiguration.get_config(model_name)
+        
+        # Load the ML Data.
+        X, y, metadata = self.load_data(model_name, target, lead_time)
+
+        # Get the CV params 
+        cv, groups = self.get_cv_params(X,y,metadata)
+
+        # Get HPO, pipeline, and calibration params
+        hyperopt_kwargs = self.get_hyperopt_kws(model_name, cv, config, hyp_fname)
+        pipeline_kwargs = self.get_pipeline_kws()
+        calibration_cv_kwargs = self.get_calibration_kws(cv, config)
+
+        if self.sample_weight:
+            sample_weight = self.get_sample_weight(y)
+        else:
+            sample_weight = None
+
+        result = self.fit_and_save(X, y, groups, sample_weight, config, hyperopt_kwargs, 
+                            pipeline_kwargs, calibration_cv_kwargs, ml_fname)
+
+        if result:
+            try:
+                self.emailer.send_email(subject, start_time)
+            except:
+                print('Unable to send email. Possibly an NSSL network issue.')
+
     def get_sample_weight(self, y, threshold=0):
         return np.where(y > threshold, 5, 1)
     
@@ -202,24 +262,19 @@ class MLTrainer:
             model = config['model'](**config.get('model_params', {}))
             estimator = TunedEstimator(model, 
                                        pipeline_kwargs, hyperopt_kwargs, calibration_cv_kwargs)
+            if hasattr(y, 'values'):
+                y = y.values
+        
+            estimator.fit(X,y,groups,sample_weight)
+            estimator.save(fname, keras=self.is_keras)
         except Exception as e:
             print(f'Model Training Error {traceback.format_exc()}')
             return False
     
-        if hasattr(y, 'values'):
-            y = y.values
-    
-        estimator.fit(X,y,groups,sample_weight)
-        estimator.save(fname, keras=self.is_keras)
+        
         del estimator, X, y
         
         gc.collect()
-
-        try:
-            cuda.select_device(0)
-            cuda.close()
-        except:
-            print('TunedEstimator Warning: failed to find GPU and deallocate memory.')
         
         return True
     
@@ -230,7 +285,6 @@ class MLTrainer:
         loader = MLDataLoader(**self.loader_kws) 
         
         X, y, metadata = loader.load()
-        
     
         if model_name == 'BaselineLR':
             # Reduced to 3 variables (hail, wind, UH). 
@@ -245,8 +299,6 @@ class MLTrainer:
             # Add on the baseline variables. 
             X[self.BASELINE_NMEPVARS] = X_bl[self.BASELINE_NMEP_VARS]
         
-    
-    
         if self.debug:
             inds = np.random.choice(len(X), size=20000)
         
@@ -256,7 +308,6 @@ class MLTrainer:
     
             X.reset_index(inplace=True, drop=True)
             metadata.reset_index(inplace=True, drop=True)
-    
     
         return X, y, metadata
 
