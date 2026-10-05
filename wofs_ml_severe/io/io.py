@@ -30,7 +30,7 @@ class MLDataLoader:
     Attributes
     ---------------------
     
-    target_colum : str or list 
+    target_column : str or list 
         The target column. For the official models, the target column is a alias rather a specific
         column in the dataframe. If a list, then the different columns are summed together 
         and re-binarized; this is useful for creating all-severe or all-sig-severe targets.

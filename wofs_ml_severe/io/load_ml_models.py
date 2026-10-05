@@ -30,53 +30,57 @@ def load_ml_model(retro=False,  **parameters):
     """
     Load a saved ML model  
     """
-    path = parameters.get('model_path', '/work/mflora/ML_DATA/OPERATIONAL_MODELS_2023')
+    path = parameters.get('model_path', '/work2/lucas.jones/ml_models/')
     ml_config = parameters.get('ml_config', {})
     if path is None:
-        path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS_2023'
+        path = '/work2/lucas.jones/ml_data/'
         
-    if not os.path.exists(path):
-        print(f"{path} does not exist! Reverting to /work/mflora/ML_DATA/OPERATIONAL_MODELS_2023 ")
-        path = '/work/mflora/ML_DATA/OPERATIONAL_MODELS'
+    if os.path.exists(path):
+        time = parameters.get('time', 'first_hour')
+        target = parameters['target']
+        file_log = parameters.get('file_log', None)
 
-    time = parameters.get('time', 'first_hour')
-    target = parameters['target']
-    file_log = parameters.get('file_log', None)
-    if file_log is None:
-        file_log = ml_config.get('file_log', None)
-    
-    random_state = parameters.get('random_state', 123)
-    
-    model_name = parameters['model_name']
-    
-    old_file_format = parameters.get('old_file_format', False)
-    
+        if file_log is None:
+            file_log = ml_config.get('file_log', None)
+        
+        random_state = parameters.get('random_state', 123)
+        
+        model_name = parameters['model_name']
+        
+        old_file_format = parameters.get('old_file_format', False)
 
-    if old_file_format: 
-        scaler = 'standard' if model_name in ["LogisticRegression", 'NeuralNetwork'] else None
-    
-        #if retro:
-            #resample = ml_config['RESAMPLE_DICT'][time][target][model_name]
-        #    resample=None
-        #    model_fname = f'{model_name}_{time}_{target}_{resample}_{scaler}_{drop_opt}.pkl'
-        #else:
-    
-        retro_str = 'retro' if retro else 'realtime'
-    
-        resample = parameters.get('resample', None) 
-    
-        model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
-    
-        if file_log is not None:
-            model_fname = model_fname.replace('.joblib', f'__{file_log}.joblib')
-    
+        if old_file_format: 
+            scaler = 'standard' if model_name in ["LogisticRegression", 'NeuralNetwork'] else None
+        
+            #if retro:
+                #resample = ml_config['RESAMPLE_DICT'][time][target][model_name]
+            #    resample=None
+            #    model_fname = f'{model_name}_{time}_{target}_{resample}_{scaler}_{drop_opt}.pkl'
+            #else:
+        
+            retro_str = 'retro' if retro else 'realtime'
+        
+            resample = parameters.get('resample', None) 
+        
+            model_fname = f'{model_name}_{target}_{resample}_{time}_{retro_str}.joblib'
+        
+            if file_log is not None:
+                model_fname = model_fname.replace('.joblib', f'__{file_log}.joblib')
+        
+        else:
+            if model_name == "StackedEnsemble":
+                model_fname = f'{model_name}_{target}_{time}.joblib'
+            else:
+                model_fname = f'{model_name}_{target}_{time}_rs_{random_state}.joblib'
+        
+        print(f'Loading {join(path, model_fname)}...')
+        model = joblib.load(join(path, model_fname))
+        
+        return model
+
     else:
-        model_fname = f'{model_name}_{target}_{time}_rs_{random_state}.joblib'
-    
-    print(f'Loading {join(path, model_fname)}...')
-    model = joblib.load(join(path, model_fname))
-    
-    return model
+        print(f"{path} does not exist! Returning None.")
+        return None
 
 def load_calibration_model(retro=False, **parameters):
     """
