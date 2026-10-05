@@ -54,8 +54,8 @@ target = 'severe_hail'
 lead_time = 'first_hour'
 model_names = ['XGBClassifier', 'RFClassifier', 'LogisticRegression']
 model_dir = '/work2/lucas.jones/ml_models/'
-
 version = None      # any added identifiers to the model name used in ml_trainer.py 
+
 n_jobs = 16
 
 # load the training data
@@ -109,7 +109,13 @@ stacker = StackingClassifier(estimators = estimators, cv = cv, n_jobs = n_jobs)
 # trains the meta-estimator, and refit the base models on the full X, y
 stacker.fit(X, y)
 
-out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}.joblib")
+# include the feature list explicitly for later ease in evaluation
+stacker.features = list(X.columns)
+
+if version == None:
+    out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}.joblib")
+else:
+    out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}_{version}.joblib")
 joblib.dump(stacker, out_name)
 
 print("=============== STACKING ENSEMBLE COMPLETED ================")
