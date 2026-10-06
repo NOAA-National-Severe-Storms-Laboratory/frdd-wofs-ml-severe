@@ -26,14 +26,14 @@ def load_ml_models_2024(ml_model_path, return_features=False):
         return model, 'hail_size'
         
         
-def load_ml_model(retro=False,  **parameters):
+def load_ml_model(retro=False, **parameters):
     """
     Load a saved ML model  
     """
     path = parameters.get('model_path', '/work2/lucas.jones/ml_models/')
     ml_config = parameters.get('ml_config', {})
     if path is None:
-        path = '/work2/lucas.jones/ml_data/'
+        path = '/work2/lucas.jones/ml_models/'
         
     if os.path.exists(path):
         time = parameters.get('time', 'first_hour')
@@ -72,6 +72,9 @@ def load_ml_model(retro=False,  **parameters):
                 model_fname = f'{model_name}_{target}_{time}.joblib'
             else:
                 model_fname = f'{model_name}_{target}_{time}_rs_{random_state}.joblib'
+
+            if file_log is not None:
+                model_fname = model_fname.replace(".joblib", f"_{file_log}.joblib")
         
         print(f'Loading {join(path, model_fname)}...')
         model = joblib.load(join(path, model_fname))

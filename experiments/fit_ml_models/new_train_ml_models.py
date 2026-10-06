@@ -21,21 +21,24 @@ if __name__ == "__main__":
 
     print("============= STARTING A NEW TRAINING PIPELINE ============='")
 
-    targets = ['severe_hail', 'severe_wind', 'severe_torn', 'severe_mesh']   #'sig_severe_hail',
+    targets = ['severe_wind', 'severe_torn']   #'sig_severe_hail', 'severe_hail', 'severe_mesh'
             #'sig_severe_wind', 'any_severe', 'any_sig_severe', 'severe_warn', 'torn_warn', 
             #'hail', 'wind', 'mesh', 'tornado_probsevere']
 
     lead_times = ['first_hour', 'second_hour']    #'third_hour', 'fourth_hour']
+    
+    # specify individual models. If None, the default models based on hazard type are used below
+    models = ["BaselineLR"]       
 
     # train the models
     for target in targets:
 
         hazard = target.split('_')[0]
 
-        if hazard == "hailsize":
-            models = ["XGBRegressor", "XGBClassifier", "RFClassifier",
-            "LogisticRegression"]
-        else:
+        if hazard == "hailsize" and models is None:
+            models = ["XGBRegressor", "XGBClassifier", "RFClassifier", 
+                      "LogisticRegression"]
+        elif models is None:
             models = ["XGBClassifier", "RFClassifier", "LogisticRegression"]  #"ElasticNet", "NNRegressor", "ExplainableBoostingRegressor"
             
         for model in models:
@@ -45,7 +48,7 @@ if __name__ == "__main__":
                 # changes to false), hyperparameter tuning, no ensemble calibration (not all the 
                 # models have been trained yet)
                 trainer = MLTrainer(calibrate = True, hyopt_tune = True, ensemble_calibration = False,
-                                    overwrite = False, debug = False)
+                                    overwrite = False, debug = False, file_log = "baseline")
                 trainer.train_model(model, target, time)
 
     print("===================== Test Complete ======================")

@@ -24,7 +24,6 @@ from wofs_ml_severe.io.io import get_numeric_init_time
 
 import numpy as np
 from os.path import join
-import joblib
 import matplotlib.pyplot as plt
 
 def get_target_str(target):
@@ -44,17 +43,23 @@ def fix_data(X):
     
     return X 
 
-OUTPATH = '/work2/lucas.jones/mlsevere_evaluation/'
-OUTNAME = "StackedEnsemble_evaluation.png"
+OUTPATH = '/work2/lucas.jones/evaluation_mlsevere/'
 DATA_PATH = '/work2/lucas.jones/ml_data/'
+outname = "AllModels_evaluation.png"
+fig_title = ""
 
-names = ['StackedEnsemble']     #, "XGBClassifier", "RFClassifier", "LogisticRegression"]
+names = ["XGBClassifier", "RFClassifier", "LogisticRegression"]     #'StackedEnsemble', 
 resample = 'None'
 lead_time = 'first_hour'
+version = None
 #target = 'wind_severe_0km'#['wind_severe_0km', 'hail_severe_0km', 'tornado_severe_0km']
 #target_str = 'wind_severe_0km'#'all_severe'
+if version is not None or not "":
+    outname = outname.replace(".png", f"_{version}.png")
 
-target = 'severe_hail'   #'severe_wind', 'severe_torn', 'severe_mesh'
+# a list of available targets and their corresponding thresholds and data 
+# can be found in wofs_ml_severe.io.io.py
+target = 'severe_hail'   #'severe_wind', 'severe_torn', 'severe_mesh', 'sig_severe_hail', 'sig_severe_wind',
 
 eval_target = target      #same thing as target currently, was 'hail_severe_original'
 target_str = get_target_str(target)
@@ -70,13 +75,14 @@ BL_DICT = {'hail_severe_0km': 'hail_nmep_>1.0_0km__prob_max',
 # Load the ML models. 
 ml_config = load_yaml(
     '/home/lucas.jones/frdd-wofs-ml-severe/wofs_ml_severe/conf/default_ml_config.yml')
-models = []            # list of model names and model objects in a tuple
+models = []            # list of model objects
 for name in names: 
     parameters = {
                 'target' : target_str,
                 'time' : lead_time, 
                 'model_name' : name,
                 'ml_config' : ml_config,
+                'file_log' : version
             }
 
     model_in = load_ml_model(retro, **parameters)
@@ -118,13 +124,25 @@ X_test = fix_data(X_test)
 #X_test = get_numeric_init_time(X_test)
 
 y_pred = [model.predict_proba(X_test)[:,1] for name, model in models]#[:-1]]
+
+# prevent impossible negative predictions for regression models
+for name in names:
+    if "Regression" in name:
+        print(name)      # test
+        y_pred[y_pred[name] < 0.0] = 0.0
+
+        style = "regression"         # useful for plot_verification later
+
+    else:
+        style = "classification"
+ 
 #bl_pred = [models[-1].predict(X_bl.reshape(-1,1))]
 
 #y_pred += bl_pred
 
 #names = ['RF', 'LR', 'XB']     #, 'BL']     #['LR', 'BL'] 
-fig, axes = plot_verification(models, X_test, y, n_boot = 10)
-
-plt.savefig(join(OUTPATH, OUTNAME), dpi = 400)
+fig, axes = plot_verification(models, X_test, y, n_boot = 10, style = style)
+fig.suptitle(fig_title)
+plt.savefig(join(OUTPATH, outname), dpi = 400)
 
 

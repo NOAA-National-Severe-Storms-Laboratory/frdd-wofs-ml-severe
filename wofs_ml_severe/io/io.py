@@ -315,9 +315,11 @@ class MLDataLoader:
             dataframes = []
             for lead_time in self.lead_time:
                 file_path = join(self.data_path, f'wofs_ml_severe__{lead_time}__data.feather')
-            
+
+                '''
                 if self._load_baseline:
                     file_path = file_path.replace('__data', '__baseline_data')
+                '''
                 
                 if self._load_reduced:
                     file_path = file_path.replace('__data', '__reduced_data')
@@ -334,9 +336,11 @@ class MLDataLoader:
         else:
             # Original functionality for single lead_time
             file_path = join(self.data_path, f'wofs_ml_severe__{self.lead_time}__data.feather')
-        
+
+            '''
             if self._load_baseline:
                 file_path = file_path.replace('__data', '__baseline_data')
+            '''
             
             if self._load_reduced:
                 file_path = file_path.replace('__data', '__reduced_data')

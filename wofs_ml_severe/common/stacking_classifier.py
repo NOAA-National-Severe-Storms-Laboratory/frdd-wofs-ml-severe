@@ -8,18 +8,11 @@ import numpy as np
 from joblib import delayed, Parallel
 import itertools
 
-from scipy.special import expit
-from scipy.special import xlogy
-from scipy.optimize import fmin_bfgs
-from sklearn.preprocessing import LabelEncoder
-
-from sklearn.base import (BaseEstimator, ClassifierMixin, RegressorMixin, clone,
+from sklearn.base import (BaseEstimator, ClassifierMixin, clone,
                    MetaEstimatorMixin)
 from sklearn.preprocessing import label_binarize, LabelBinarizer
 from sklearn.utils import check_X_y, check_array, indexable, column_or_1d
 from sklearn.utils.validation import check_is_fitted, check_consistent_length
-from sklearn.utils.validation import _check_sample_weight
-from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import check_cv

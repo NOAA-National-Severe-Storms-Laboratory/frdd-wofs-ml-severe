@@ -83,10 +83,10 @@ class MLTrainer:
     
     BASELINE_VARS = ['uh_2to5_instant__time_max__amp_ens_mean_spatial_perc_90',
            'ws_80__time_max__amp_ens_mean_spatial_perc_90',
-           'hailcast__time_max__amp_ens_mean_spatial_perc_90',
+           #'hailcast__time_max__amp_ens_mean_spatial_perc_90',
           ]
     
-    BASELINE_NMEP_VARS = ['hail_nmep_>1.0_0km__prob_max',
+    BASELINE_NMEP_VARS = [#'hail_nmep_>1.0_0km__prob_max',
                      'wind_nmep_>40_0km__prob_max',
                      'uh_nmep_>180_0km__prob_max',
                             ]
@@ -103,7 +103,7 @@ class MLTrainer:
                         'ExplainableBoostingRegressor']
     
     CLASS_MODELS = ['LogisticRegression', 'BaselineClass',  'XGBClassifier', 'NNClassifier', 
-                   'ExplainableBoostingClassifier', 'RFClassifier']
+                   'ExplainableBoostingClassifier', 'RFClassifier', 'BaselineLR']
     
     IS_KERAS_MODEL = ['NNRegressor', 'NNClassifier']
     
@@ -294,10 +294,10 @@ class MLTrainer:
             bl_loader_kws['load_baseline_dataframe'] = True
             bl_loader = MLDataLoader(**bl_loader_kws) 
             
-            X_bl = bl_loader.load() 
+            X_bl, y_bl, metadata_bl = bl_loader.load() 
             
             # Add on the baseline variables. 
-            X[self.BASELINE_NMEPVARS] = X_bl[self.BASELINE_NMEP_VARS]
+            X[self.BASELINE_VARS] = X_bl[self.BASELINE_VARS]         #BASELINE_NMEPVARS] = X_bl[self.BASELINE_NMEP_VARS]
         
         if self.debug:
             inds = np.random.choice(len(X), size=20000)
