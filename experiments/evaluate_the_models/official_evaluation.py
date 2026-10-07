@@ -17,7 +17,6 @@ sys.path.insert(0, '/home/lucas.jones/python_packages/scikit-verify')
 
 from wofs_ml_severe.io.io import MLDataLoader
 from wofs_ml_severe.io.load_ml_models import load_ml_model
-from wofs_ml_severe.common.emailer import Emailer 
 from wofs.post.utils import load_yaml
 from skverify.verification import plot_verification
 from wofs_ml_severe.io.io import get_numeric_init_time
@@ -43,29 +42,29 @@ def fix_data(X):
     
     return X 
 
-OUTPATH = '/work2/lucas.jones/evaluation_mlsevere/'
-DATA_PATH = '/work2/lucas.jones/ml_data/'
-outname = "AllModels_evaluation.png"
-fig_title = ""
-
-names = ["XGBClassifier", "RFClassifier", "LogisticRegression"]     #'StackedEnsemble', 
-resample = 'None'
-lead_time = 'first_hour'
-version = None
-#target = 'wind_severe_0km'#['wind_severe_0km', 'hail_severe_0km', 'tornado_severe_0km']
-#target_str = 'wind_severe_0km'#'all_severe'
-if version is not None or not "":
-    outname = outname.replace(".png", f"_{version}.png")
+names = ["XGBClassifier", "RFClassifier", "LogisticRegression"]     #'StackedEnsemble', "BaselineLR"
+lead_time = 'second_hour'
+version = "fullfeat"           # if desired model to retrieve has multiple versions, set name convention here
 
 # a list of available targets and their corresponding thresholds and data 
 # can be found in wofs_ml_severe.io.io.py
-target = 'severe_hail'   #'severe_wind', 'severe_torn', 'severe_mesh', 'sig_severe_hail', 'sig_severe_wind',
+target = 'severe_hail'     #, 'severe_wind', 'severe_torn', 'severe_mesh', 'sig_severe_hail', 'sig_severe_wind',
+
+OUTPATH = '/work2/lucas.jones/evaluation_mlsevere/'
+DATA_PATH = '/work2/lucas.jones/ml_data/'
+
+# make the outfile name based on the target and version
+hour = lead_time.split("_")[0]
+if version is not None:
+    outname = f"AllModels_{hour}_{target}_eval_{version}.png"
+else:
+    outname = f"AllModels_{hour}_{target}_eval.png"
 
 eval_target = target      #same thing as target currently, was 'hail_severe_original'
 target_str = get_target_str(target)
 retro = False
-# Evaluating the base classifier (without calibration)
-append_base_est = False
+append_base_est = False       # Evaluating the base classifier (without calibration)
+baseline = False              # flag for later baseline related calculations
 
 BL_DICT = {'hail_severe_0km': 'hail_nmep_>1.0_0km__prob_max',
            'wind_severe_0km': 'wind_nmep_>40_0km__prob_max',
@@ -75,7 +74,10 @@ BL_DICT = {'hail_severe_0km': 'hail_nmep_>1.0_0km__prob_max',
 # Load the ML models. 
 ml_config = load_yaml(
     '/home/lucas.jones/frdd-wofs-ml-severe/wofs_ml_severe/conf/default_ml_config.yml')
-models = []            # list of model objects
+
+models = []            # list of model objects and names in a tuple
+bl_models = []         # a list of baseline model objects and names in a tuple
+
 for name in names: 
     parameters = {
                 'target' : target_str,
@@ -89,8 +91,14 @@ for name in names:
 
     # extract the model and append it to the models list for later use
     # making predictions. Stacking Classifier models don't have a dictionary,
-    # so it can be appended directly
-    if name == "StackedEnsemble":
+    # so it can be appended directly. Any baseline model should be added 
+    # to the bl_models list
+    if "Baseline" in name:
+        bl_models.append((name, model_in['model']))
+        bl_features = list(model_in["X"].columns)
+
+        baseline = True  
+    elif name == "StackedEnsemble":
         models.append((name, model_in))
         features = model_in.features
     else:
@@ -109,39 +117,37 @@ data_loader = MLDataLoader(target_column=eval_target,
                               data_path = DATA_PATH)
 X, y, metadata = data_loader.load()
 
-'''
-# loads baseline data, seemingly deprecated
-X_bl, y, metadata = load_ml_data(target_col=eval_target, 
-                                  lead_time=lead_time,
-                                  mode=mode,
-                                  baseline=True,
-                                 base_path = DATA_PATH
-                                 )
-'''
-
 X_test = X[features]
 X_test = fix_data(X_test)
-#X_test = get_numeric_init_time(X_test)
 
-y_pred = [model.predict_proba(X_test)[:,1] for name, model in models]#[:-1]]
+# if a baseline model is included, subset the features to those used by baselines otherwise 
+# set the bl_model list and data to None for integration with plot_verifiction
+if baseline:
+    X_bl = X[bl_features]
+else: 
+    bl_models = None
+    X_bl = None
+
+# predictions that can be used for other plots or metrics added later
+y_pred = {name : model.predict_proba(X_test)[:,1] for name, model in models}#[:-1]]
 
 # prevent impossible negative predictions for regression models
 for name in names:
     if "Regression" in name:
-        print(name)      # test
-        y_pred[y_pred[name] < 0.0] = 0.0
+        y_pred[name][y_pred[name] < 0.0] = 0.0 
 
-        style = "regression"         # useful for plot_verification later
-
-    else:
-        style = "classification"
- 
 #bl_pred = [models[-1].predict(X_bl.reshape(-1,1))]
 
 #y_pred += bl_pred
 
-#names = ['RF', 'LR', 'XB']     #, 'BL']     #['LR', 'BL'] 
-fig, axes = plot_verification(models, X_test, y, n_boot = 10, style = style)
+fig, axes = plot_verification(models, X_test, y, n_boot = 10, baseline_estimators = bl_models,
+                              X_baseline = X_bl)
+# create a figure title based on the many possible configurations
+if version is not None:
+    fig_title = f"Evaluation of {hour} hour {target} with {version}"    
+else:
+    fig_title = f"Evaluation of {hour} hour {target}"       
+
 fig.suptitle(fig_title)
 plt.savefig(join(OUTPATH, outname), dpi = 400)
 
