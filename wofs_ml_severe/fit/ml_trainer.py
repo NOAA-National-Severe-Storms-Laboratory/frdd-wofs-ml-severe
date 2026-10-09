@@ -14,19 +14,12 @@ sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-wofs-post')
 
 from ..common.emailer import Emailer 
 from ..io.io import MLDataLoader
-from .ml_configuration import MLConfiguration
+#from .ml_configuration import MLConfiguration
 from ml_workflow import TunedEstimator 
 
 from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
 import numpy as np
 
-'''
-# prevent multiprocessing and threading deadlocks
-try:
-    mp.set_start_method('spawn', force=True)
-except RuntimeError:
-    pass
-'''
 
 class MLTrainer:
     """
@@ -150,6 +143,12 @@ class MLTrainer:
         fitting_process.join()
 
     def fitting(self, model_name, target, lead_time, sample_weight=False):
+
+        # local import ensures tensorflow only initilizes inside the child process
+        # spawned. This ensures the GPU is available to the child process.
+        sys.path.insert(0, '/home/lucas.jones/frdd-wofs-ml-severe')
+        from .ml_configuration import MLConfiguration
+
         self.sample_weight = sample_weight
         self.is_keras = self.is_keras_model(model_name)
         self.target_type = self.get_target_type(model_name)
@@ -171,6 +170,12 @@ class MLTrainer:
             
         # Get the configuration params for the ML models.
         config = MLConfiguration.get_config(model_name)
+
+        # if no scorer is provided, get the scorer from ML Configuration
+        if self.scorer is None:
+            scorer = MLConfiguration.get_scorer(self.target_type)
+        else:
+            scorer = self.scorer
         
         # Load the ML Data.
         X, y, metadata = self.load_data(model_name, target, lead_time)
@@ -179,7 +184,7 @@ class MLTrainer:
         cv, groups = self.get_cv_params(X,y,metadata)
 
         # Get HPO, pipeline, and calibration params
-        hyperopt_kwargs = self.get_hyperopt_kws(model_name, cv, config, hyp_fname)
+        hyperopt_kwargs = self.get_hyperopt_kws(model_name, cv, config, hyp_fname, scorer)
         pipeline_kwargs = self.get_pipeline_kws()
         calibration_cv_kwargs = self.get_calibration_kws(cv, config)
 
@@ -334,7 +339,7 @@ class MLTrainer:
         return pipeline_kwargs
         
     
-    def get_hyperopt_kws(self, model_name, cv, config, output_fname):
+    def get_hyperopt_kws(self, model_name, cv, config, output_fname, backup_scorer):
         """Initialize the kwargs for the hyperparameter optimization"""
         if self.hyperopt_optimizer is None:
             optimizer = 'grid_search' if model_name in self.SMALL_SEARCH_SPACES else 'tpe'
@@ -347,10 +352,7 @@ class MLTrainer:
             else:
                 scorer = self.scorer
         else:
-            if self.scorer is None:
-                scorer = MLConfiguration.get_scorer(self.target_type)
-            else:
-                scorer = self.scorer
+            scorer = backup_scorer
 
         hyperopt_kwargs = None
         if self.hyopt_tune:       

@@ -46,41 +46,39 @@ except ImportError:
     
 import numpy as np
 
-MLPRegressor = None
-'''
+#MLPRegressor = None
+
 class MLPRegressor(KerasRegressor):
 
     def __init__(
         self,
-        initial_hidden_layer_size = 128,
-        optimizer="adam",
-        loss='mse', 
-        optimizer__learning_rate=0.001,
-        layer_size_decay_rate = 0.75,
-        num_layers = 3, 
+        initial_hidden_layer_size=128,
+        num_layers=3,
+        layer_size_decay_rate=0.75,
         activation='leaky_relu',
-        batch_norm = True,
+        batch_norm=True,
         l1_weight=0.001,
-        l2_weight=0.01, 
+        l2_weight=0.01,
         dropout_rate=0.1,
-        epochs=200,
-        verbose=1,
-        **kwargs,
+        **kwargs
     ):
-        super().__init__(**kwargs)
-        
-        self.hidden_layer_sizes = self._hidden_layer_sizes(initial_hidden_layer_size, 
-                                                           num_layers, layer_size_decay_rate)
+        self.initial_hidden_layer_size = initial_hidden_layer_size
+        self.num_layers = num_layers
+        self.layer_size_decay_rate = layer_size_decay_rate
+        self.activation = activation
         self.batch_norm = batch_norm
-        self.activation = activation 
+        self.l1_weight = l1_weight
+        self.l2_weight = l2_weight
+        self.dropout_rate = dropout_rate
+        '''
         self.optimizer = optimizer
+        self.loss = loss
+        self.optimizer__learning_rate = optimizer__learning_rate
         self.epochs = epochs
         self.verbose = verbose
-        self.l1_weight = l1_weight
-        self.l2_weight = l2_weight 
-        self.loss = loss
-        self.dropout_rate = dropout_rate
-        self.verbose = verbose
+        '''
+        
+        super().__init__(**kwargs)
 
     def _hidden_layer_sizes(self, initial_size, num_layers, decay_rate):
         """
@@ -91,7 +89,7 @@ class MLPRegressor(KerasRegressor):
         :param decay_rate: Rate of decay for layer sizes.
         :return: List of sizes for each hidden layer.
         """
-        return (int(initial_size * np.exp(-decay_rate * i)) for i in range(num_layers))
+        return [int(initial_size * np.exp(-decay_rate * i)) for i in range(num_layers)]
 
     def _get_regularization_layer(self,  l1_weight, l2_weight ):
         """ Creates a regularization object.
@@ -141,7 +139,12 @@ class MLPRegressor(KerasRegressor):
         self.model = keras.Sequential()
         inp = keras.layers.Input(shape=(self.n_features_in_))
         self.model.add(inp)
-        for n in self.hidden_layer_sizes:
+
+        hidden_layer_sizes = self._hidden_layer_sizes(self.initial_hidden_layer_size, 
+                                                      self.num_layers, 
+                                                      self.layer_size_decay_rate)
+
+        for n in hidden_layer_sizes:
             # Apply Dense layer with regularization 
             dense_layer = self._get_dense_layer(n, self.l1_weight, self.l2_weight)
             self.model.add(dense_layer)
@@ -165,14 +168,17 @@ class MLPRegressor(KerasRegressor):
         self.model.add(out)
         
         # Compile the model.
-        self.model.compile(optimizer = self.optimizer, 
+        # no need to compile, KerasRegressor does this automatically
+        '''
+                self.model.compile(optimizer = self.optimizer, 
                            loss = self.loss)
+        '''
 
         if self.verbose > 0:
             print(self.model.summary())
 
         return self.model
-'''
+
 
 import numpy as np
 import xgboost as xgb
@@ -212,7 +218,7 @@ ml_config = {
         "model_params": {
             "seed": 123,
             "tree_method": "hist",
-            "device": "cuda:1",
+            "device": "cuda:0",
             "sampling_method": "gradient_based",      #, "uniform"
             "n_jobs": 32,      # ensures CPU threads used in parallel with GPU are also limited
             "max_bin": 64
@@ -225,7 +231,7 @@ ml_config = {
             "reg_lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
             "min_child_weight": [1,3,5,7],
         },
-        "n_jobs": 1,
+        "n_jobs": 8,
         "n_iter": 100,
         "patience": 20
     },
@@ -236,7 +242,7 @@ ml_config = {
             "objective": "binary:logistic",
             "seed": 123,
             "tree_method": "hist",
-            "device": "cuda:1",
+            "device": "cuda:0",
             "sampling_method": "gradient_based",      #, "uniform"
             "n_jobs": 32,     # ensures CPU threads used in parallel with GPU are limited
             "max_bin": 64
@@ -250,7 +256,7 @@ ml_config = {
             "reg_lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
             "min_child_weight": [1,3,5,7],
         },
-        "n_jobs": 1,
+        "n_jobs": 8,
         "n_iter": 100,
         "patience": 20
     },    
@@ -314,7 +320,10 @@ ml_config = {
     "NNRegressor": {
         "model": MLPRegressor,
         "model_params": {
-            "epochs": 20
+            "epochs": 20,
+            "optimizer": "adam",
+            "optimizer__learning_rate": 0.001,
+            "verbose": 1,
         },
         "search_space": {
             'initial_hidden_layer_size' : [32,64,128,256],

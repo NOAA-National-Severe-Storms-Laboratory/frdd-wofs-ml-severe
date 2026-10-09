@@ -9,6 +9,9 @@
 # Date: Sept. 28, 2026
 #======================================================
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import sys
 sys.path.insert(0, '/home/lucas.jones/frdd-wofs-ml-severe')
 sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-wofs-post')
@@ -21,14 +24,16 @@ if __name__ == "__main__":
 
     print("============= STARTING A NEW TRAINING PIPELINE ============='")
 
-    targets = ['severe_wind', 'severe_torn']   #'sig_severe_hail', 'severe_hail', 'severe_mesh'
+    targets = ['severe_wind', 'severe_torn', 'severe_hail', 'severe_mesh']   #'sig_severe_hail', 
             #'sig_severe_wind', 'any_severe', 'any_sig_severe', 'severe_warn', 'torn_warn', 
             #'hail', 'wind', 'mesh', 'tornado_probsevere']
 
     lead_times = ['first_hour', 'second_hour']    #'third_hour', 'fourth_hour']
     
     # specify individual models. If None, the default models based on hazard type are used below
-    models = ["BaselineLR"]       
+    models = ["NNRegressor"]      #["BaselineLR"]      
+    VERSION = "fullfeat"          # the file_log or versioning information to add at the end of the model filename
+    OVERWRITE = False              # whether or not to overwrite the existing models of the same configuration
 
     # train the models
     for target in targets:
@@ -48,7 +53,7 @@ if __name__ == "__main__":
                 # changes to false), hyperparameter tuning, no ensemble calibration (not all the 
                 # models have been trained yet)
                 trainer = MLTrainer(calibrate = True, hyopt_tune = True, ensemble_calibration = False,
-                                    overwrite = False, debug = False, file_log = "baseline")
+                                    overwrite = OVERWRITE, debug = False, file_log = VERSION)
                 trainer.train_model(model, target, time)
 
     print("===================== Test Complete ======================")
