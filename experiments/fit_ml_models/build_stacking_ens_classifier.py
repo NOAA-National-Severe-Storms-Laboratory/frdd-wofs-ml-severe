@@ -14,6 +14,7 @@
 
 import sys
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"      
 import joblib
 from os.path import join
 
@@ -50,72 +51,77 @@ def dates_to_groups(dates, n_splits = 5):
     return groups
 
 # the target, time, and models used in the ensemble
-target = 'severe_hail'
-lead_time = 'first_hour'
+targets = ["severe_hail", "severe_torn", "severe_wind"]     
+lead_times = ['second_hour']     #'first_hour', 
 model_names = ['XGBClassifier', 'RFClassifier', 'LogisticRegression']
 model_dir = '/work2/lucas.jones/ml_models/'
-version = None      # any added identifiers to the model name used in ml_trainer.py 
+version = "nocal"     # any added identifiers to the model name used in ml_trainer.py 
 
 n_jobs = 16
 
-# load the training data
-loader_kws = {
-    'data_path' : '/work2/lucas.jones/ml_data/',
-    'return_full_dataframe': False, 
-    'random_state' : 123, 
-    'months' : ['April', 'May', 'June'],
-    'years' : [2026],  
-    'mode' : 'training',
-    'target_column': target,
-    'lead_time': lead_time
-}
-
 print("============= STARTING STACKING ENSEMBLE PIPELINE ============='")
 
-loader = MLDataLoader(**loader_kws)
-X, y, metadata = loader.load()
-groups = dates_to_groups(dates = metadata['Run Date'], n_splits = 5)
-cv = list(StratifiedGroupKFold(n_splits = 5).split(X, y, groups))
 
-# bring in the tuned models and retrain to create the stacking ensemble.
-estimators = []
-for model_name in model_names:
+for target in targets:
+    for lead_time in lead_times:
 
-    # the file name convention used by ml_trainer.py, but additional identifiers can be added
-    # in that script which can be accounted for with the version variable.
-    if version is not None:
-        filename = f"{model_name}_{target}_{lead_time}_rs_123_{version}.joblib"
-    else:
-        filename = f"{model_name}_{target}_{lead_time}_rs_123.joblib" 
-    
-    model_path = join(model_dir, filename)
-    
-    if os.path.exists(model_path):
-        model = joblib.load(model_path)["model"]   # extract the model from other saved data
+        # load the training data
+        loader_kws = {
+            'data_path' : '/work2/lucas.jones/ml_data/',
+            'return_full_dataframe': False, 
+            'random_state' : 123, 
+            'months' : ['April', 'May', 'June'],
+            'years' : [2026],  
+            'mode' : 'training',
+            'target_column': target,
+            'lead_time': lead_time
+        }
 
-        if hasattr(model, "estimator"):
-            model = model.estimator     # extract the estimator if calibration was performed
+        loader = MLDataLoader(**loader_kws)
+        X, y, metadata = loader.load()
+        groups = dates_to_groups(dates = metadata['Run Date'], n_splits = 5)
+        cv = list(StratifiedGroupKFold(n_splits = 5).split(X, y, groups))
+
+        # bring in the tuned models and retrain to create the stacking ensemble.
+        estimators = []
         
-        estimators.append(model)    #extract the model information and append it
+        for model_name in model_names:
 
-    else:
-        print(f"Could not find {model_path}")
+            # the file name convention used by ml_trainer.py, but additional identifiers can be added
+            # in that script which can be accounted for with the version variable.
+            if version is not None:
+                filename = f"{model_name}_{target}_{lead_time}_rs_123_{version}.joblib"
+            else:
+                filename = f"{model_name}_{target}_{lead_time}_rs_123.joblib" 
+            
+            model_path = join(model_dir, filename)
+            
+            if os.path.exists(model_path):
+                model = joblib.load(model_path)["model"]   # extract the model from other saved data
 
-# fit the stacking classifier
-print(f"Training StackingClassifier for {target} at {lead_time}...")
-stacker = StackingClassifier(estimators = estimators, cv = cv, n_jobs = n_jobs)
+                if hasattr(model, "estimator"):
+                    model = model.estimator     # extract the estimator if calibration was performed
+                
+                estimators.append(model)    #extract the model information and append it
 
-# this clones the tuned parameters, fits them across the CV splits, 
-# trains the meta-estimator, and refit the base models on the full X, y
-stacker.fit(X, y)
+            else:
+                print(f"Could not find {model_path}")
 
-# include the feature list explicitly for later ease in evaluation
-stacker.features = list(X.columns)
+        # fit the stacking classifier
+        print(f"Training StackingClassifier for {target} at {lead_time}...")
+        stacker = StackingClassifier(estimators = estimators, cv = cv, n_jobs = n_jobs)
 
-if version == None:
-    out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}.joblib")
-else:
-    out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}_{version}.joblib")
-joblib.dump(stacker, out_name)
+        # this clones the tuned parameters, fits them across the CV splits, 
+        # trains the meta-estimator, and refit the base models on the full X, y
+        stacker.fit(X, y)
+
+        # include the feature list explicitly for later ease in evaluation
+        stacker.features = list(X.columns)
+
+        if version == None:
+            out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}.joblib")
+        else:
+            out_name = join(model_dir, f"StackedEnsemble_{target}_{lead_time}_{version}.joblib")
+        joblib.dump(stacker, out_name)
 
 print("=============== STACKING ENSEMBLE COMPLETED ================")

@@ -179,6 +179,136 @@ class MLPRegressor(KerasRegressor):
 
         return self.model
 
+class MLPClassifier(KerasClassifier):
+
+    def __init__(
+        self,
+        initial_hidden_layer_size=128,
+        num_layers=3,
+        layer_size_decay_rate=0.75,
+        activation='leaky_relu',
+        batch_norm=True,
+        l1_weight=0.001,
+        l2_weight=0.01,
+        dropout_rate=0.1,
+        **kwargs
+    ):
+        self.initial_hidden_layer_size = initial_hidden_layer_size
+        self.num_layers = num_layers
+        self.layer_size_decay_rate = layer_size_decay_rate
+        self.activation = activation
+        self.batch_norm = batch_norm
+        self.l1_weight = l1_weight
+        self.l2_weight = l2_weight
+        self.dropout_rate = dropout_rate
+        '''
+        self.optimizer = optimizer
+        self.loss = loss
+        self.optimizer__learning_rate = optimizer__learning_rate
+        self.epochs = epochs
+        self.verbose = verbose
+        '''
+        
+        super().__init__(**kwargs)
+
+    def _hidden_layer_sizes(self, initial_size, num_layers, decay_rate):
+        """
+        Calculate hidden layer sizes using exponential decay.
+    
+        :param initial_size: Size of the first hidden layer.
+        :param num_layers: Total number of hidden layers.
+        :param decay_rate: Rate of decay for layer sizes.
+        :return: List of sizes for each hidden layer.
+        """
+        return [int(initial_size * np.exp(-decay_rate * i)) for i in range(num_layers)]
+
+    def _get_regularization_layer(self,  l1_weight, l2_weight ):
+        """ Creates a regularization object.
+        """
+        return keras.regularizers.l1_l2(l1=l1_weight, l2=l2_weight)
+    
+    def _get_activation_layer(self, function_name, alpha_parameter=0.2): 
+        """ Creates an activation layer. 
+        :param function name: Name of activation function (must be accepted by
+                        `_check_activation_function`).
+        :param alpha_parameter: Slope (used only for eLU and leaky ReLU functions).
+        :return: layer_object: Instance of `keras.layers.Activation`,
+                        `keras.layers.ELU`, or `keras.layers.LeakyReLU`.
+        """
+        if function_name == 'elu': 
+            return ELU( alpha = alpha_parameter )
+        if function_name == 'leaky_relu': 
+            return LeakyReLU( alpha = alpha_parameter) 
+        return Activation(function_name)  
+    
+    def _get_dropout_layer(self):
+        """ Create a dropout object for the dense layers
+        """
+        return Dropout( rate = self.dropout_rate )
+    
+    def _get_batch_norm_layer( self ):
+            """Creates batch-normalization layer.
+
+            :return: layer_object: Instance of `keras.layers.BatchNormalization`.
+            """
+            return BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True)
+    
+    def _get_dense_layer(self, num_neurons, l1_weight, l2_weight, dense_bias='zeros',
+                        kernel_initializer = 'glorot_uniform', output_layer=False): 
+        """ Create a Dense layer with optionally regularization. 
+        """
+        return Dense( num_neurons ,
+                              kernel_initializer = kernel_initializer,
+                              use_bias           = True,
+                              bias_initializer   = dense_bias,
+                              activation         = None,
+                              kernel_regularizer = self._get_regularization_layer( l1_weight, l2_weight) )
+    
+    
+    def _keras_build_fn(self, compile_kwargs: Dict[str, Any]):
+        
+        self.model = keras.Sequential()
+        inp = keras.layers.Input(shape=(self.n_features_in_))
+        self.model.add(inp)
+
+        hidden_layer_sizes = self._hidden_layer_sizes(self.initial_hidden_layer_size, 
+                                                      self.num_layers, 
+                                                      self.layer_size_decay_rate)
+
+        for n in hidden_layer_sizes:
+            # Apply Dense layer with regularization 
+            dense_layer = self._get_dense_layer(n, self.l1_weight, self.l2_weight)
+            self.model.add(dense_layer)
+            
+            # Apply activation 
+            activation_layer = self._get_activation_layer( 
+                    function_name = self.activation )
+            self.model.add(activation_layer)
+        
+            # Apply batch normalization (optional) 
+            if self.batch_norm:
+                batch_norm_layer= self._get_batch_norm_layer()
+                self.model.add(batch_norm_layer)
+            
+            if self.dropout_rate > 0 : 
+                dropout_layer = self._get_dropout_layer()
+                self.model.add(dropout_layer)
+            
+        # Add the final layer. 
+        out = keras.layers.Dense(1, activation = "sigmoid")
+        self.model.add(out)
+        
+        # Compile the model.
+        # no need to compile, KerasRegressor does this automatically
+        '''
+                self.model.compile(optimizer = self.optimizer, 
+                           loss = self.loss)
+        '''
+
+        if self.verbose > 0:
+            print(self.model.summary())
+
+        return self.model
 
 import numpy as np
 import xgboost as xgb
@@ -264,7 +394,7 @@ ml_config = {
     "RFClassifier": {
         "model": RandomForestClassifier,
         "model_params": {
-            "n_jobs": 32,
+            "n_jobs": 64,
             "random_state": 123
         },
         "search_space": {
@@ -275,11 +405,43 @@ ml_config = {
             "min_samples_leaf": [2, 4, 5, 10, 15, 20, 25, 50],
             "class_weight": ["balanced", None]
         },
-        "n_jobs": 32,
+        "n_jobs": 1,
         "n_iter": 100,
         "patience": 20
     },
-    
+
+       "RFRegressor": {
+            "model": RandomForestRegressor,
+            "model_params": {
+                "n_jobs": 64,
+                "random_state": 123
+            },
+            "search_space": {
+                "criterion": ["squared_error"],
+                "n_estimators": [100, 125, 150, 175, 200, 225, 250, 275, 300],
+                "max_depth": [2, 5, 10, 15, 25, 40, None],
+                "min_samples_split": [2, 5, 10, 15, 40],
+                "min_samples_leaf": [2, 4, 5, 10, 15, 20, 25, 50],
+                "max_features": ["sqrt", "log2", 1.0]
+            },
+            "n_jobs": 1,
+            "n_iter": 100,
+            "patience": 20
+        },
+
+    '''
+    "Earth": {
+        "model": 
+        "model_params": {
+            "n_jobs": 32:
+            "random_state": 123
+        },
+        "search_space": {
+
+        }
+        }
+    }
+    '''
     
     "LogisticRegression": {
         "model": LogisticRegression,
@@ -339,6 +501,30 @@ ml_config = {
         "n_iter": 10,
         "patience": 5
     },
+
+
+    "NNClassifier": {
+            "model": MLPClassifier,
+            "model_params": {
+                "epochs": 20,
+                "optimizer": "adam",
+                "optimizer__learning_rate": 0.001,
+                "verbose": 1,
+            },
+            "search_space": {
+                'initial_hidden_layer_size' : [32,64,128,256],
+                "num_layers" : [1,2,3], 
+                "activation" : ['elu', 'leaky_relu'],
+                "batch_norm" : [True, False],
+                "l1_weight" : [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+                "l2_weight": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+                "dropout_rate": [0, 0.1, 0.3],
+                "loss" : ['binary_crossentropy']
+            },
+            "n_jobs": 1,
+            "n_iter": 10,
+            "patience": 5
+        },
     
     
     "ExplainableBoostingRegressor": {
