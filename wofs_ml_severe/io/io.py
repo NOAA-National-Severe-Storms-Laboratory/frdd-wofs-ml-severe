@@ -426,7 +426,7 @@ class MLDataLoader:
         drop_vars = self.OBJECT_FEATURES
     
         # Removing any of the new features. 
-        removed_features = ['QVAPOR_850', 
+        '''removed_features = ['QVAPOR_850', 
                             'QVAPOR_700', 
                             'QVAPOR_500', 
                             'qv_2', 
@@ -446,7 +446,8 @@ class MLDataLoader:
                    'geo_hgt_700',
                    'geo_hgt_500',
                    'theta_e', 
-                  ] 
+                  ]'''
+        removed_features = []
     
         for f in X.columns:
             # No longer using the conditional features. 
@@ -485,26 +486,33 @@ class MLDataLoader:
     
 
 class HailSizeLoader:
-    def __init__(self, lead_time, mode=None):
+    def __init__(self, lead_time, mode=None, **loader_kws):
         self.lead_time = lead_time 
         self.mode = mode
 
-    def load(self, mode='training'):
-        loader_kws= {
-             'data_path' :  '/work/mflora/ML_DATA/DATA/',
-              'return_full_dataframe': False, 
-              # Random state is fixed, so the data is compatible 
-              # with the classification models. 
-              'random_state' : 123, 
-              'mode' : mode,
-              'exclude_missing_mesh': True,
-              'target_column' : ['mesh', 'hail'],
-              'lead_time' : self.lead_time,
-              'load_multiple_y' : True
-                            }
+        if not loader_kws:
+            self.loader_kws = {
+                'data_path' : '/work2/lucas.jones/ml_data/',
+                'return_full_dataframe': False, 
+                # Random state is fixed, so the data is compatible 
+                # with the classification models.
+                'random_state' : 123, 
+                'mode' : self.mode,
+                'exclude_missing_mesh': True,
+                'target_column' : ['mesh', 'hail'],
+                'lead_time' : self.lead_time,
+                'load_multiple_y' : True
+                }
+        else:
+            self.loader_kws = loader_kws
+            self.loader_kws["mode"] = self.mode
+            self.loader_kws["target_column"] = ["mesh", "hail"]
+            self.loader_kws["load_multiple_y"] = True
+
+    def load(self):        
         
         # Load the training dataset
-        loader = MLDataLoader(**loader_kws)
+        loader = MLDataLoader(**self.loader_kws)
         X, y, metadata = loader.load()
 
         # Get the combined MESH and LSR hail sizes. 
@@ -532,7 +540,8 @@ class HailSizeLoader:
         
         
         # Split into training and validation 
-        if mode == 'training':
+        # This is already handled by ML Data Loader now
+        '''if mode == 'training':
             X_train, X_val, y_train, y_val = loader._nn_train_test_split(X, y, metadata)
         
             self.check_for_nans_and_inf(X_train, y_train, X_val, y_val)
@@ -540,7 +549,9 @@ class HailSizeLoader:
             return X_train, X_val, y_train, y_val
         
         else:
-            return X, y, metadata
+            return X, y, metadata'''
+
+        return X, y, metadata
         
     
     def check_for_nans_and_inf(self, X_train, y_train, X_val, y_val ):

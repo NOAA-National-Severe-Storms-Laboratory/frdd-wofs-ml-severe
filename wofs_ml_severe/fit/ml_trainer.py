@@ -13,7 +13,7 @@ sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-ml-workflow')
 sys.path.insert(0, '/home/lucas.jones/python_packages/frdd-wofs-post')
 
 from ..common.emailer import Emailer 
-from ..io.io import MLDataLoader
+from ..io.io import MLDataLoader, HailSizeLoader
 #from .ml_configuration import MLConfiguration
 from ml_workflow import TunedEstimator 
 
@@ -280,14 +280,27 @@ class MLTrainer:
         del estimator, X, y
         
         gc.collect()
-        
+
+        # in the case of a keras model, import tensorflow and clear the session to free
+        # up the GPU
+        if self.is_keras:
+            try:
+                import tensorflow as tf
+                tf.keras.backend.clear_session()
+            except ImportError:
+                pass
+
         return True
     
     def load_data(self, model_name, target, time):
         """Load the input ML dataframe, target variable, and metadata"""
         self.loader_kws['target_column'] = target
         self.loader_kws['lead_time'] = time 
-        loader = MLDataLoader(**self.loader_kws) 
+
+        if target == "hail_size":
+            loader = HailSizeLoader(lead_time = time, mode = self.loader_kws["mode"])
+        else:
+            loader = MLDataLoader(**self.loader_kws) 
         
         X, y, metadata = loader.load()
     
@@ -375,8 +388,11 @@ class MLTrainer:
         # Determine the example grouping for the cross-validation. 
         groups = self.dates_to_groups(dates, n_splits=5)
         
-        # Initialize the cross-validation groups 
-        cv = list(StratifiedGroupKFold(n_splits=5).split(X,y,groups))
+        # Initialize the cross-validation groups based on modeling task
+        if self.target_type == "regression":
+            cv = list(GroupKFold(n_splits=5).split(X, y, groups))
+        else:
+            cv = list(StratifiedGroupKFold(n_splits=5).split(X,y,groups))
         
         return cv, groups
         
