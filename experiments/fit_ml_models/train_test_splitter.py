@@ -13,11 +13,12 @@ from tqdm import tqdm
 from os.path import join
 import pandas as pd
 import random
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedGroupKFold
 import json
 
 def train_test_splitter(months =['April', 'May', 'June', 'July'],
-                        test_size=0.3, baseline = True):
+                        test_size=0.3, stratify = None, file_version = None,
+                        baseline = True):
     """
     Randomly split the full ML and BL datasets into training and testing 
     based on the date. The testing dataset size is based on 
@@ -33,23 +34,31 @@ def train_test_splitter(months =['April', 'May', 'June', 'July'],
     
         print(f'Full Dataset Shape: {df.shape=}')
         
-        # Get the date from April, May, and June 
+        # Get the date from the desired months
         df['Run Date'] = df['Run Date'].apply(str)
         
         df = df[pd.to_datetime(df['Run Date']).dt.strftime('%B').isin(months)]
 
         all_dates = list(df['Run Date'].unique())
         random.shuffle(all_dates)
-        train_dates, test_dates = train_test_split(all_dates, test_size=test_size)
+        train_dates, test_dates = train_test_split(all_dates, test_size=test_size, 
+                                                   stratify = stratify)
 
         train_json = json.dumps(train_dates, indent = 0)
         test_json = json.dumps(test_dates, indent = 0)
 
-        with open(join(BASE_PATH, f'wofs_ml_severe__{time}__training_dates.json'), "w") as file:
-            file.write(train_json)
+        if file_version is None:
+            with open(join(BASE_PATH, f'wofs_ml_severe__{time}__training_dates.json'), "w") as file:
+                file.write(train_json)
 
-        with open(join(BASE_PATH, f'wofs_ml_severe__{time}__testing_dates.json'), "w") as file:
-            file.write(test_json)
+            with open(join(BASE_PATH, f'wofs_ml_severe__{time}__testing_dates.json'), "w") as file:
+                file.write(test_json)
+        else :
+            with open(join(BASE_PATH, f'wofs_ml_severe__{time}__training_dates{file_version}.json'), 
+                      "w") as file: file.write(train_json)
+            
+            with open(join(BASE_PATH, f'wofs_ml_severe__{time}__testing_dates{file_version}.json'),
+                      "w") as file: file.write(test_json)
     
         '''
         train_df = df[df['Run Date'].isin(train_dates)] 
@@ -91,7 +100,9 @@ def train_test_splitter(months =['April', 'May', 'June', 'July'],
 
 # switch to determine if baseline splitting should be performed also
 baseline = False
+version = "notest"
 
-train_test_splitter(baseline = baseline)
+train_test_splitter(baseline = baseline, test_size = 0.1, file_version = version, 
+                    stratify = None)
 
 print("Date based train/test splitting completed!")
