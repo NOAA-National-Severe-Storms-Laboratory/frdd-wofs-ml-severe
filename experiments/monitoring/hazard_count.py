@@ -16,11 +16,11 @@ from wofs_ml_severe.io.io import MLDataLoader
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
 
 hazards = ['severe_hail', 'severe_wind', 'severe_torn']
-lead_times = ["first_hour", "second_hour"]
+lead_times = ["first_hour", "second_hour", "third_hour", "fourth_hour"]
 modes = ["training", "testing"]
+version = "dateadj"
 
 # read in the training and testing data and save counts of each hazard for each hour to 
 # a pandas dataframe
@@ -31,7 +31,7 @@ for mode in modes:
         for time in lead_times:
 
             loader = MLDataLoader(target_column = name, lead_time = time, mode = mode, 
-                                  data_path = "/work2/lucas.jones/ml_data")
+                                  data_path = "/work2/lucas.jones/ml_data", version = version)
             x, data, metadata = loader.load()
 
             # get the count of that hazard occuring
@@ -43,15 +43,24 @@ training = counts[counts["mode"] == "training"]
 testing = counts[counts["mode"] == "testing"]
 
 fig, ax = plt.subplots(nrows = 2, ncols = 1, layout = "constrained")
+
 res1 = ax[0].grouped_bar([training[training["hazards"] == "severe_hail"]["count"], 
                          training[training["hazards"] == "severe_wind"]["count"],
                          training[training["hazards"] == "severe_torn"]["count"]], 
                          tick_labels = lead_times, labels = hazards)
+
+for container in res1.bar_containers:
+        ax[0].bar_label(container, padding = 3, fontsize = 6)
+
 res2 = ax[1].grouped_bar([testing[testing["hazards"] == "severe_hail"]["count"],
                           testing[testing["hazards"] == "severe_wind"]["count"], 
                           testing[testing["hazards"] == "severe_torn"]["count"]],
                           tick_labels = lead_times, labels = hazards)
+ax[1].legend()
+for container in res2.bar_containers:
+    ax[1].bar_label(container, padding = 3, fontsize = 6)
+
 ax[0].set_title("Training Data")
 ax[1].set_title("Testing Data")
-fig.suptitle("Occurence of Hazards in the Data- Random Split", fontweight = "bold")
-plt.savefig("hazard_counts_randomsplit.png", dpi = 400)
+fig.suptitle("Occurence of Hazards in the Data- Constant Hazard Proportion", fontweight = "bold")
+plt.savefig(f"hazard_counts_{version}.png", dpi = 400)
