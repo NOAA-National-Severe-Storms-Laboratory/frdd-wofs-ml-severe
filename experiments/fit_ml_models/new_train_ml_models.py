@@ -10,7 +10,6 @@
 #======================================================
 
 import os
-import os
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -28,26 +27,33 @@ if __name__ == "__main__":
 
     print("============= STARTING A NEW TRAINING PIPELINE ============='")
 
-    targets = ['mesh']   #'sig_severe_hail', 'severe_wind', 'severe_torn', 'severe_hail', 'severe_mesh'
-            #'sig_severe_wind', 'any_severe', 'any_sig_severe', 'severe_warn', 'torn_warn', "hail_size"
-            #'hail', 'wind', , 'tornado_probsevere']
+    targets = ['severe_mesh', 'severe_wind', 'severe_torn', 'any_severe', 'any_sig_severe']     #'sig_severe_hail',  'severe_hail'
+            #'sig_severe_wind', , 'severe_warn', 'torn_warn', "hail_size"
+            #'hail', 'wind', 'mesh', 'tornado_probsevere']
 
-    lead_times = ['first_hour', 'second_hour']    #'third_hour', 'fourth_hour']
+    lead_times = ['first_hour', 'second_hour', ]    #'third_hour', 'fourth_hour'
     
     # specify individual models. If None, the default models based on hazard type are used below
-    models = None      #"XGBRegressor", "BaselineLR", "NNRegressor", "NNClassifier", "RFRegressor"
-    VERSION = "fullfeat"          # the file_log or versioning information to add at the end of the model filename
+    models = ["NNClassifier"]      #"XGBClassifier", "RFClassifier", "LogisticRegression", "XGBRegressor", "BaselineLR", "NNRegressor", , "RFRegressor"
+    VERSION = "eqhaz"          # the file_log or versioning information to add at the end of the model filename
     OVERWRITE = False              # whether or not to overwrite the existing models of the same configuration
+
+    custom_kws = {
+    'data_path' : '/work2/lucas.jones/ml_data/',
+    'return_full_dataframe': False, 
+    'random_state' : 123, 
+    'months' : ['April', 'May', 'June'],
+    'years' : [2026],  
+    'mode' : 'training', 
+    'version': VERSION}
 
     # train the models
     for target in targets:
 
-        hazard = target.split('_')[0]
-
-        if hazard == "hail_size" or hazard == "mesh" and models is None:
+        if target == "hail_size" or target == "mesh" and models is None:
             models = ["XGBRegressor", "RFRegressor", "NNRegressor"]
         elif models is None:
-            models = ["XGBClassifier", "RFClassifier", "LogisticRegression", "NNClassifier"]  
+            models = ["NNClassifier", "XGBClassifier", "RFClassifier", "LogisticRegression"]  
             
         for model in models:
             for time in lead_times:
@@ -55,7 +61,8 @@ if __name__ == "__main__":
                 # changes to false), hyperparameter tuning, no ensemble calibration (not all the 
                 # models have been trained yet)
                 trainer = MLTrainer(calibrate = False, hyopt_tune = True, ensemble_calibration = False,
-                                    overwrite = OVERWRITE, debug = False, file_log = VERSION)
+                                    overwrite = OVERWRITE, debug = False, file_log = VERSION, 
+                                    loader_kws = custom_kws)
                 trainer.train_model(model, target, time)
 
-    print("===================== Test Complete ======================")
+    print("===================== Training Complete ======================")

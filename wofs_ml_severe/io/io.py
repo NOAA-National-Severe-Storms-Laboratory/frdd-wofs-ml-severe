@@ -120,7 +120,7 @@ class MLDataLoader:
                  return_full_dataframe = False, load_reduced_dataframe=True, 
                  load_baseline_dataframe=False, 
                  data_path = '/work2/lucas.jones/ml_data/', 
-                 random_state=123, test_size = 0.3,
+                 version = None, random_state=123, test_size = 0.3,
                  months = ['April', 'May', 'June'],
                  years = [2026], 
                  exclude_missing_mesh=False, 
@@ -142,6 +142,7 @@ class MLDataLoader:
         self.test_size = test_size
 
         self.data_path = data_path
+        self.version = version
         self.alter_init_times = alter_init_times
         self.load_multiple_y=load_multiple_y
         self.drop_features = drop_features
@@ -242,7 +243,11 @@ class MLDataLoader:
         """Read in the randomly selected dates for the train test split'
         and divide the data using the dates"""
 
-        filename = join(self.data_path, f"wofs_ml_severe__{self.lead_time}__{self.mode}_dates.json")
+        if self.version is None:
+            filename = join(self.data_path, f"wofs_ml_severe__{self.lead_time}__{self.mode}_dates.json")
+        else:
+            filename = join(self.data_path, f"wofs_ml_severe__{self.lead_time}__{self.mode}_dates_{self.version}.json")
+
 
         if not exists(filename):
             raise FileNotFoundError(f"""{filename} not found! 
@@ -314,7 +319,10 @@ class MLDataLoader:
             # Handle the case where lead_time is a list
             dataframes = []
             for lead_time in self.lead_time:
-                file_path = join(self.data_path, f'wofs_ml_severe__{lead_time}__data.feather')
+                if self.version is None:
+                    file_path = join(self.data_path, f'wofs_ml_severe__{lead_time}__data.feather')
+                else:
+                    file_path = join(self.data_path, f'wofs_ml_severe__{lead_time}__data_{self.version}.feather')
 
                 '''
                 if self._load_baseline:
@@ -335,7 +343,11 @@ class MLDataLoader:
             
         else:
             # Original functionality for single lead_time
-            file_path = join(self.data_path, f'wofs_ml_severe__{self.lead_time}__data.feather')
+
+            if self.version is None:
+                file_path = join(self.data_path, f'wofs_ml_severe__{self.lead_time}__data.feather')
+            else:
+                file_path = join(self.data_path, f'wofs_ml_severe__{self.lead_time}__data_{self.version}.feather')
 
             '''
             if self._load_baseline:

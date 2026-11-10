@@ -126,7 +126,7 @@ class MLDataPipeline(Emailer):
         
         self.keep_existing_ml_files = keep_existing_ml_files
 
-        # TODO: figure out the purpose of this
+        # removed because I don't want to do this in a script. Too risky. --Lucas
         #if 'FINAL' in delete_types:
             #os.system('rm /work/mflora/ML_DATA/DATA/wofs*').    Currently removed for safety
         
