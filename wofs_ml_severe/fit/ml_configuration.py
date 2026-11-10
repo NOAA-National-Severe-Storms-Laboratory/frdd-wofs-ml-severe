@@ -5,6 +5,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBClassifier, XGBRegressor
 
 from sklearn.metrics import average_precision_score, mean_squared_error
+from sklearn.base import ClassifierMixin
 from typing import Dict, Iterable, Any
 import scipy.stats as stats
 
@@ -20,8 +21,8 @@ except:
     print('scikeras is not installed')
     
 try:
-    import tensorflow as tf
-
+    from tensorflow import keras
+    from tensorflow.keras.models import Model, save_model, load_model
     from tensorflow import keras
     from tensorflow.keras.models import Model, save_model, load_model
     from tensorflow.keras.layers import (Dense, 
@@ -179,7 +180,8 @@ class MLPRegressor(KerasRegressor):
 
         return self.model
 
-class MLPClassifier(KerasClassifier):
+class MLPClassifier(KerasClassifier, ClassifierMixin):
+    _estimator_type = "classifier"
 
     def __init__(
         self,
@@ -361,7 +363,7 @@ ml_config = {
             "reg_lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
             "min_child_weight": [1,3,5,7],
         },
-        "n_jobs": 8,
+        "n_jobs": 1,
         "n_iter": 100,
         "patience": 20
     },
@@ -375,7 +377,8 @@ ml_config = {
             "device": "cuda:0",
             "sampling_method": "gradient_based",      #, "uniform"
             "n_jobs": 32,     # ensures CPU threads used in parallel with GPU are limited
-            "max_bin": 64
+            "max_bin": 64,
+            "verbosity": 2
 
         },
         "search_space": {
@@ -386,7 +389,7 @@ ml_config = {
             "reg_lambda": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0],
             "min_child_weight": [1,3,5,7],
         },
-        "n_jobs": 8,
+        "n_jobs": 1,
         "n_iter": 100,
         "patience": 20
     },    
@@ -427,21 +430,7 @@ ml_config = {
             "n_jobs": 1,
             "n_iter": 100,
             "patience": 20
-        },
-
-    '''
-    "Earth": {
-        "model": 
-        "model_params": {
-            "n_jobs": 32:
-            "random_state": 123
-        },
-        "search_space": {
-
-        }
-        }
-    }
-    '''
+    },
     
     "LogisticRegression": {
         "model": LogisticRegression,

@@ -85,8 +85,9 @@ class Concatenator():
         df_cp['Run Date'] = pd.to_datetime(df_cp['Run Date'], format='%Y%m%d')
 
         # Apply the condition and subtract one day
-        cond = np.where((df_cp['Run Date'].dt.year.isin([2021, 
-                                                         2022])) & (df_cp['Initialization Time INT'] >= 24))[0]
+        # removed condition for only 2021 and 2022 as all MPAS data now has this UTC date split set up --Lucas
+        # (df_cp['Run Date'].dt.year.isin([2021, 2022])) & 
+        cond = np.where(df_cp['Initialization Time INT'] >= 24)[0]
         
         bad_dates = df_cp.loc[(cond), 'Run Date']
         good_dates = bad_dates - pd.to_timedelta(1, unit='d')

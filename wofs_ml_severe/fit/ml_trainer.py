@@ -1,3 +1,13 @@
+
+try:
+    import tensorflow as tf
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+except ImportError:
+    pass
+
 from os.path import join, exists
 import os
 import itertools
@@ -105,15 +115,9 @@ class MLTrainer:
                  calibrate=False, hyopt_tune=False, ensemble_calibration=False, 
                  scaler='standard',  overwrite=False, 
                  debug=False, file_log=None, scorer=None, hyperopt_optimizer=None,
-                loader_kws= {
-                             'data_path' :  '/work2/lucas.jones/ml_data/',
-                             'return_full_dataframe': False, 
-                             'random_state' : 123, 
-                             'months' : ['April', 'May', 'June'],
-                             'years' : [2026],  
-                             'mode' : 'training'
-                            }):
-        
+                 loader_kws = None):
+                 
+    
         self.outpath = outpath
         self.calibrate = calibrate
         self.hyopt_tune = hyopt_tune 
@@ -123,11 +127,16 @@ class MLTrainer:
         self.debug = debug
         self.file_log = file_log 
         self.hyperopt_optimizer = hyperopt_optimizer
-        
+        if loader_kws is None:
+            self.loader_kws = {'data_path' :  '/work2/lucas.jones/ml_data/', 'return_full_dataframe': False, 
+                               'random_state' : 123, 'months' : ['April', 'May', 'June'], 
+                               'years' : [2026],  'mode' : 'training'}
+        else:
+            self.loader_kws = loader_kws
+                
         self.overwrite = overwrite
         self.scorer = scorer
         self.emailer = Emailer()
-        
         
     def train_model(self, model_name, target, lead_time, sample_weight=False):
         """Train the ML pipeline"""
