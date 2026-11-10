@@ -47,23 +47,25 @@ def fix_data(X):
     
     return X 
 
-# , "BaselineLR",  'StackedEnsemble', "NNClassifier", "XGBClassifier", "RFClassifier", "LogisticRegression"
-names = ["NNRegressor", "RFRegressor", "XGBRegressor"]     
-lead_times = ['first_hour', 'second_hour']
+# "NNRegressor", "RFRegressor", "XGBRegressor", "BaselineLR", 'StackedEnsemble', 
+names = ["NNClassifier", "XGBClassifier", "RFClassifier", "LogisticRegression"]     
+lead_times = ['second_hour']        #"first_hour",  , "third_hour", "fourth_hour"
+pred_times = ["third_hour", "fourth_hour"]        # lead_times  -almost always the same as lead times 
 MODIFIER = "AllModels"        # the model name or combination to list at the start of the output file
-VERSION = "fullfeat"          # if desired model to retrieve has multiple versions, set name convention here
-TASK = "regression"           # determines whether classification or regression evaluation is performed
+VERSION = "eqhaz"          # if desired model to retrieve has multiple versions, set name convention here
+TASK = "classification"           # determines whether classification or regression evaluation is performed
 
 # a list of available targets and their corresponding thresholds and data 
 # can be found in wofs_ml_severe.io.io.py
-# 'severe_mesh', 'sig_severe_hail', 'sig_severe_wind', 'severe_hail', 'severe_wind', 'severe_torn'
-targets = ["hail_size"]
+#  'sig_severe_hail', 'sig_severe_wind', 'severe_hail',  , "hail_size", 
+# "mesh", , 'torn_warn'
+targets = ['severe_mesh', 'severe_wind', 'severe_torn', "any_severe", "any_sig_severe"]
 
 OUTPATH = '/work2/lucas.jones/evaluation_mlsevere/'
 DATA_PATH = '/work2/lucas.jones/ml_data/'
 
 # the number of bootstrapping iterations for confidence intervals of the 
-# metrics(see 2021 paper, pg. 10 for caveat)
+# metrics(see 2021 paper, pg. 10 for caveat on bootstrapping)
 n_boot = 1000         
 
 for target in targets:
@@ -74,13 +76,16 @@ for target in targets:
     else:
         eval_target = target
         
-    for lead_time in lead_times:
+    for i in range(len(lead_times)):
+
+        lead_time = lead_times[i]
+        pred_time = pred_times[i]
 
         # make the outfile name based on the target and version
         if VERSION is not None:
-            outname = f"{MODIFIER}_{target}_{lead_time}_eval_{VERSION}.png"
+            outname = f"{MODIFIER}_{target}_{pred_time}_eval_{VERSION}.png"     # predLSR
         else:
-            outname = f"{MODIFIER}_{target}_{lead_time}_eval.png"
+            outname = f"{MODIFIER}_{target}_{pred_time}_eval.png"
 
         target_str = get_target_str(target)
         retro = False
@@ -134,10 +139,10 @@ for target in targets:
         # Load the data, with specific condition to use HailDataLoader in the case of 
         # predicting hail_size
         if target == "hail_size":
-            data_loader = HailSizeLoader(lead_time=lead_time, mode="testing")
+            data_loader = HailSizeLoader(lead_time=pred_time, mode="testing")
         else:
             data_loader = MLDataLoader(target_column=eval_target, 
-                                        lead_time=lead_time,
+                                        lead_time=pred_time,
                                         mode = "testing",
                                         data_path = DATA_PATH)
             
@@ -163,7 +168,7 @@ for target in targets:
             fig, axes = plot_verification(models, X_test, y, n_boot = n_boot, baseline_estimators = bl_models,
                                         X_baseline = X_bl, style = "classification")
             # create a figure title based on the many possible configurations
-            hour = lead_time.split("_")[0]
+            hour = pred_time.split("_")[0]
             if VERSION is not None:
                 fig_title = f"Evaluation of {hour} hour {eval_target} with {VERSION}"    
             else:
@@ -191,6 +196,8 @@ for target in targets:
                 metrics.append([name, mse, mae, medae])
                 
             df = pd.DataFrame(metrics, columns = ["Model Name", "MSE", "MAE", "MedAE"])
+            print("======================REGRESSION RESULTS======================")
+            print(f"for {lead_time}, {target} ")
             print(df)
         
     
